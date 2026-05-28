@@ -1,0 +1,21 @@
+{
+	"schemaVersion": 1,
+	"items": [
+		{
+			"id": "pinkbolt",
+			"num": 9001,
+			"name": "Pink Bolt",
+			"type": "Electric",
+			"category": "Special",
+			"basePower": 90,
+			"accuracy": 100,
+			"pp": 15,
+			"priority": 0,
+			"target": "normal",
+			"shortDesc": "30% chance to paralyze the target.",
+			"flags": { "protect": 1, "mirror": 1 },
+			"secondary": { "chance": 30, "status": "par" },
+			"contestType": "Cute"
+		}
+	]
+}

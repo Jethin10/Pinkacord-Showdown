@@ -1,0 +1,60 @@
+{
+	"schemaVersion": 1,
+	"items": [
+		{
+			"species": "pinkachu",
+			"moves": [
+				"pinkbolt",
+				"thunderbolt",
+				"thunder",
+				"thundershock",
+				"voltswitch",
+				"electroball",
+				"discharge",
+				"moonblast",
+				"dazzlinggleam",
+				"drainingkiss",
+				"playrough",
+				"calmmind",
+				"nastyplot",
+				"substitute",
+				"protect",
+				"rest",
+				"sleeptalk",
+				"toxic",
+				"facade",
+				"tailwind",
+				"encore",
+				"thunderwave",
+				"helpinghand"
+			]
+		},
+		{
+			"species": "volcaron",
+			"moves": [
+				"fireblast",
+				"flamethrower",
+				"overheat",
+				"firespin",
+				"bugbuzz",
+				"signalbeam",
+				"strugglebug",
+				"quiverdance",
+				"calmmind",
+				"morningsun",
+				"hurricane",
+				"airslash",
+				"psychic",
+				"gigadrain",
+				"hiddenpowerground",
+				"substitute",
+				"protect",
+				"roost",
+				"sunnyday",
+				"willowisp",
+				"tailwind",
+				"uturn"
+			]
+		}
+	]
+}

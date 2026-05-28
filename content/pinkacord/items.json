@@ -1,0 +1,65 @@
+{
+	"schemaVersion": 1,
+	"items": [
+		{
+			"id": "pinkberry",
+			"num": 9001,
+			"name": "Pink Berry",
+			"shortDesc": "Heals 25% HP and cures any status when HP drops below 50%.",
+			"effects": [
+				{
+					"kind": "itemCureStatus",
+					"params": { "healFraction": 0.25 }
+				}
+			]
+		},
+		{
+			"id": "lifefragment",
+			"num": 9002,
+			"name": "Life Fragment",
+			"shortDesc": "Boosts all moves by 1.3x but takes 10% recoil.",
+			"effects": [
+				{
+					"kind": "itemBoostDamageWithRecoil",
+					"params": { "multiplier": 1.3, "recoilFraction": 0.1 }
+				}
+			]
+		},
+		{
+			"id": "leftoversclone",
+			"num": 9003,
+			"name": "Leftovers Clone",
+			"shortDesc": "Heals 1/16 of max HP at the end of each turn.",
+			"effects": [
+				{
+					"kind": "itemHealPerTurn",
+					"params": { "fraction": 0.0625 }
+				}
+			]
+		},
+		{
+			"id": "vestofmight",
+			"num": 9004,
+			"name": "Vest of Might",
+			"shortDesc": "Takes half damage from Special moves but can't use Status moves.",
+			"effects": [
+				{
+					"kind": "itemReduceSpecialDamage",
+					"params": {}
+				}
+			]
+		},
+		{
+			"id": "orbofaura",
+			"num": 9005,
+			"name": "Orb of Aura",
+			"shortDesc": "When hit by contact, attacker takes 1/6 max HP damage.",
+			"effects": [
+				{
+					"kind": "itemRecoilOnContactHit",
+					"params": { "fraction": 0.1667 }
+				}
+			]
+		}
+	]
+}

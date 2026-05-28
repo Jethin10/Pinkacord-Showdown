@@ -1,0 +1,106 @@
+{
+	"schemaVersion": 1,
+	"items": [
+		{
+			"id": "pinkacordou",
+			"name": "[Pinkacord] OU",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Pinkacord's flagship singles format. Gen 9 mechanics plus the custom Pinkacord dex.",
+			"gameType": "singles",
+			"ruleset": [
+				"Standard"
+			],
+			"banlist": [
+				"Uber",
+				"AG",
+				"Moody",
+				"King's Rock",
+				"Baton Pass"
+			],
+			"unbanlist": [],
+			"enabled": true
+		},
+		{
+			"id": "pinkacordubers",
+			"name": "[Pinkacord] Ubers",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Anything goes within the Pinkacord dex.",
+			"gameType": "singles",
+			"ruleset": [
+				"Standard"
+			],
+			"banlist": [
+				"AG"
+			],
+			"enabled": true
+		},
+		{
+			"id": "pinkacordrandombattle",
+			"name": "[Pinkacord] Random Battle",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Random teams featuring Pinkacord's custom Pokémon — Gen 9 pool plus the Pinkacord dex!",
+			"gameType": "singles",
+			"team": "random",
+			"ruleset": [
+				"PotD",
+				"Obtainable",
+				"Species Clause",
+				"HP Percentage Mod",
+				"Cancel Mod",
+				"Sleep Clause Mod",
+				"Illusion Level Mod"
+			],
+			"banlist": [],
+			"enabled": true
+		},
+		{
+			"id": "pinkacorddoublesrandombattle",
+			"name": "[Pinkacord] Doubles Random Battle",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Random doubles teams featuring Pinkacord's custom Pokémon.",
+			"gameType": "doubles",
+			"team": "random",
+			"ruleset": [
+				"PotD",
+				"Obtainable",
+				"Species Clause",
+				"HP Percentage Mod",
+				"Cancel Mod",
+				"Sleep Clause Mod",
+				"Illusion Level Mod"
+			],
+			"banlist": [],
+			"enabled": true
+		},
+		{
+			"id": "pinkacorddoublesou",
+			"name": "[Pinkacord] Doubles OU",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Pinkacord doubles. Two active Pokémon per side; standard gen 9 doubles rules plus the Pinkacord dex.",
+			"gameType": "doubles",
+			"ruleset": [
+				"Standard Doubles"
+			],
+			"banlist": [
+				"DUber",
+				"Moody",
+				"Power Construct",
+				"Shadow Tag",
+				"Final Gambit",
+				"Perish Song",
+				"Swagger"
+			],
+			"enabled": true
+		}
+	]
+}

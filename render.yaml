@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pinkacord
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PINKACORD_ADMIN_PASSWORD
+        sync: false # set in Render dashboard
+      - key: PORT
+        value: "8000" # Render routes external traffic here
+      - key: PINKACORD_PS_PORT
+        value: "8000"
+      - key: PINKACORD_PS_HOST
+        value: "0.0.0.0"
+      - key: PINKACORD_ADMIN_PORT
+        value: "8001"
+      - key: PINKACORD_ADMIN_BIND
+        value: "127.0.0.1" # admin panel stays internal
+    healthCheckPath: /health
+    # Free tier: 750 hours/month, spins down after 15 min inactivity
+    # Set up UptimeRobot (free) to ping /health every 5 minutes to keep alive

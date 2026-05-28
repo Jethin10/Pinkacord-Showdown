@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"species": [
+		{
+			"id": "pinkachu",
+			"spriteid": "pikachu",
+			"num": 10001
+		},
+		{
+			"id": "volcaron",
+			"spriteid": "volcarona",
+			"num": 10002
+		}
+	],
+	"moves": [],
+	"abilities": []
+}

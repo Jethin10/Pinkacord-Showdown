@@ -1,0 +1,93 @@
+# Fly.io launch config for Pinkacord.
+# Reference: https://fly.io/docs/reference/configuration/
+#
+# Edit the app name and primary_region before running `fly launch --copy-config`.
+# Volume and secrets steps are documented in HOSTING.pinkacord.md.
+
+app = "pinkacordshowdown"
+primary_region = "iad"
+# Picks the region closest to most of your community. fra/lhr (Europe), sin/nrt (Asia), gru (South America), syd (Oceania).
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PINKACORD_PS_PORT = "8000"
+  PINKACORD_ADMIN_PORT = "8001"
+  PINKACORD_ADMIN_BIND = "0.0.0.0"
+  # PINKACORD_LOGIN_URL is overridden only if you operate your own login server.
+  # Secrets (PINKACORD_ADMIN_PASSWORD, PINKACORD_BOT_PASSWORD) MUST be set via
+  # `fly secrets set` — never commit them.
+
+# Public-facing service for players. Maps :443 (HTTPS/WSS) and :80 → PS server.
+# Fly terminates TLS for you, so PS itself only needs to know about plain HTTP.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  # PS uses WebSocket; long-lived connections need a generous concurrency soft
+  # limit. The hard limit gates new traffic when the box is near capacity.
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 200
+    hard_limit = 250
+
+  # PS exposes "/" which 200s when the server is healthy.
+  [[services.tcp_checks]]
+    grace_period = "20s"
+    interval = "30s"
+    timeout = "5s"
+
+# Admin panel. Exposed on a separate port; we strongly recommend keeping it
+# behind Fly's "private networking" or a Cloudflare Access policy rather than
+# making it publicly reachable. The block below maps it to a different
+# subdomain port; review the security note in HOSTING.pinkacord.md before
+# enabling.
+[[services]]
+  protocol = "tcp"
+  internal_port = 8001
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 8443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 25
+    hard_limit = 50
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/health"
+
+# Persistent storage for ladder ratings, modlog, audit log, content/, replays.
+[mounts]
+  source = "pinkacord_data"
+  destination = "/app/logs"
+  # See HOSTING.pinkacord.md for how to also mount /app/databases + /app/content;
+  # Fly supports multiple mounts per app.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  # 1 GB is comfortable for a small community. If you outgrow it, bump to 2 GB
+  # before sharding across machines — PS scales vertically much further than
+  # this size.

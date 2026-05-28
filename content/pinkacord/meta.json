@@ -1,0 +1,8 @@
+{
+	"schemaVersion": 1,
+	"id": "pinkacord",
+	"name": "Pinkacord",
+	"description": "Custom Pokemon Showdown content for the Pinkacord Discord community.",
+	"parentMod": "gen9",
+	"gen": 9
+}

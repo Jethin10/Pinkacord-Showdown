@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"items": [
+		{
+			"id": "roseaura",
+			"name": "Rose Aura",
+			"shortDesc": "This Pokemon's Fairy-type moves have 1.33x power.",
+			"effects": [
+				{
+					"kind": "boostMovePowerByType",
+					"params": {
+						"type": "Fairy",
+						"multiplier": 1.33
+					}
+				}
+			],
+			"breakable": false
+		}
+	]
+}
