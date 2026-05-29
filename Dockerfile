@@ -39,13 +39,14 @@ FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
-# Production-only install reuses the layer cache from stage 1 when package.json
-# is unchanged. We keep devDeps out of the final image to minimize attack surface.
+# Production-only install. We need zod at runtime because the admin panel's
+# generator uses it for validation. Install it separately after the main install.
 COPY --from=build /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund && npm install zod --save=false --no-audit --no-fund && npm cache clean --force
 
 # Bring in the source we still need at runtime + the transpiled output.
 # PS's bin script reads config/, data/, server/static/, etc. from the repo root.
+COPY --from=build /app/tsconfig.json ./
 COPY --from=build /app/pokemon-showdown ./pokemon-showdown
 COPY --from=build /app/build ./build
 COPY --from=build /app/dist ./dist
