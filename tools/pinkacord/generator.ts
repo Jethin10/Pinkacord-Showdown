@@ -291,8 +291,19 @@ export function crossReferenceValidate(c: LoadedContent): void {
 		// any species in PS's base data or our custom data, flag it as a likely typo.
 		// Tier names (uber, ou, ag) and ability/item names are intentionally skipped.
 		const customSpeciesIds = new Set(c.species.map((s) => s.id));
-		const knownTiers = new Set(["ag", "uber", "ou", "uubl", "uu", "rubl", "ru", "nubl", "nu", "publ", "pu", "zubl", "zu", "nfe", "lc", "dober", "dou", "dbl", "duu"]);
-		const knownEntries = new Set([...psBaseSpecies, ...customSpeciesIds]);
+		const knownTiers = new Set(["ag", "uber", "ou", "uubl", "uu", "rubl", "ru", "nubl", "nu", "publ", "pu", "zubl", "zu", "nfe", "lc", "dober", "dou", "dbl", "duu", "duber"]);
+		const psAbilities = loadPSAbilities();
+		const psItems = loadPSItems();
+		const psMoves = loadPSMoves();
+		const customAbilityIds = new Set(c.abilities.map((a) => a.id));
+		const customItemIds = new Set(c.items.map((i) => i.id));
+		const customMoveIds = new Set(c.moves.map((m) => m.id));
+		const knownEntries = new Set([
+			...psBaseSpecies, ...customSpeciesIds,
+			...psAbilities, ...customAbilityIds,
+			...psItems, ...customItemIds,
+			...psMoves, ...customMoveIds,
+		]);
 		for (const entry of [...(f.banlist || []), ...(f.unbanlist || [])]) {
 			const bare = String(entry).replace(/^[+\-*]/, "").trim();
 			const eid = bare.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -377,6 +388,52 @@ function loadPSBaseSpecies(): Set<string> {
 		while ((m = re.exec(src)) !== null) out.add(m[1]);
 	} catch { /* silent */ }
 	cachedPSBaseSpecies = out;
+	return out;
+}
+
+let cachedPSAbilities: Set<string> | null = null;
+let cachedPSItems: Set<string> | null = null;
+let cachedPSMoves: Set<string> | null = null;
+
+function loadPSAbilities(): Set<string> {
+	if (cachedPSAbilities) return cachedPSAbilities;
+	const out = new Set<string>();
+	const file = path.join(REPO_ROOT, "data", "abilities.ts");
+	try {
+		const src = fs.readFileSync(file, "utf8");
+		const re = /^\t([a-z][a-z0-9]+):\s*\{/gm;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(src)) !== null) out.add(m[1]);
+	} catch { /* silent */ }
+	cachedPSAbilities = out;
+	return out;
+}
+
+function loadPSItems(): Set<string> {
+	if (cachedPSItems) return cachedPSItems;
+	const out = new Set<string>();
+	const file = path.join(REPO_ROOT, "data", "items.ts");
+	try {
+		const src = fs.readFileSync(file, "utf8");
+		const re = /^\t([a-z][a-z0-9]+):\s*\{/gm;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(src)) !== null) out.add(m[1]);
+	} catch { /* silent */ }
+	cachedPSItems = out;
+	return out;
+}
+
+function loadPSMoves(): Set<string> {
+	if (cachedPSMoves) return cachedPSMoves;
+	const out = new Set<string>();
+	const file = path.join(REPO_ROOT, "data", "moves.ts");
+	try {
+		const src = fs.readFileSync(file, "utf8");
+		const re = /^\t([a-z][a-z0-9]+):\s*\{/gm;
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(src)) !== null) out.add(m[1]);
+	} catch { /* silent */ }
+	cachedPSMoves = out;
 	return out;
 }
 
