@@ -20,8 +20,8 @@ RUN npm ci --no-audit --no-fund
 
 COPY . .
 
-# Create config.js from the example if it doesn't exist (it's gitignored)
-RUN cp -n config/config-example.js config/config.js 2>/dev/null || true
+# Use committed config.js if it exists, otherwise fall back to the example.
+RUN if [ -f config/config.js ]; then echo "using committed config.js"; else cp config/config-example.js config/config.js; fi
 
 # Phase 1: PS TypeScript build
 RUN node build force
