@@ -51,7 +51,10 @@ const NODE = process.execPath;
 // Required state checks before we spawn anything
 // ────────────────────────────────────────────────────────────────────────────
 
-if (!process.env.PINKACORD_ADMIN_PASSWORD) {
+// PINKACORD_PS_ONLY=1 skips the admin panel to save memory (for constrained hosts).
+const PS_ONLY = process.env.PINKACORD_PS_ONLY === "1" || process.env.PINKACORD_PS_ONLY === "true";
+
+if (!PS_ONLY && !process.env.PINKACORD_ADMIN_PASSWORD) {
 	console.error("[launcher] FATAL: PINKACORD_ADMIN_PASSWORD is required.");
 	console.error("[launcher] Set it in your environment or a .env file (see .env.example).");
 	process.exit(1);
@@ -64,7 +67,7 @@ if (!fs.existsSync(path.join(REPO_ROOT, "dist"))) {
 }
 
 const ADMIN_ENTRY = path.join(REPO_ROOT, "dist", "tools", "pinkacord-admin", "server.js");
-if (!fs.existsSync(ADMIN_ENTRY)) {
+if (!PS_ONLY && !fs.existsSync(ADMIN_ENTRY)) {
 	console.error("[launcher] FATAL: admin server bundle missing at " + ADMIN_ENTRY);
 	console.error("[launcher] Run `node build force` first.");
 	process.exit(1);
@@ -142,14 +145,20 @@ function shutdown(code) {
 	}, 5000).unref();
 }
 
-console.log("[launcher] starting PS server on " + psPort + " and admin panel on " + adminPort);
-const ps = spawnChild("ps", NODE, ["pokemon-showdown", psPort]);
-wireExit("ps", ps);
-// Give PS a brief head start so the admin's first health-check sees it up.
-setTimeout(() => {
-	const admin = spawnChild("admin", NODE, [ADMIN_ENTRY]);
-	wireExit("admin", admin);
-}, 1500);
+if (PS_ONLY) {
+	console.log("[launcher] starting PS server only on " + psPort + " (PS_ONLY mode)");
+	const ps = spawnChild("ps", NODE, ["pokemon-showdown", psPort]);
+	wireExit("ps", ps);
+} else {
+	console.log("[launcher] starting PS server on " + psPort + " and admin panel on " + adminPort);
+	const ps = spawnChild("ps", NODE, ["pokemon-showdown", psPort]);
+	wireExit("ps", ps);
+	// Give PS a brief head start so the admin's first health-check sees it up.
+	setTimeout(() => {
+		const admin = spawnChild("admin", NODE, [ADMIN_ENTRY]);
+		wireExit("admin", admin);
+	}, 1500);
+}
 
 process.on("SIGINT", () => { console.log("\n[launcher] SIGINT"); shutdown(0); });
 process.on("SIGTERM", () => { console.log("\n[launcher] SIGTERM"); shutdown(0); });

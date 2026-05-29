@@ -1,21 +1,34 @@
 services:
+  # ── PS Game Server (low memory, no admin panel) ──────────────────────────
   - type: web
     name: pinkacord
     runtime: docker
     dockerfilePath: ./Dockerfile
     envVars:
-      - key: PINKACORD_ADMIN_PASSWORD
-        sync: false # set in Render dashboard
+      - key: PINKACORD_PS_ONLY
+        value: "1"
       - key: PORT
-        value: "8000" # Render routes external traffic here
+        value: "8000"
       - key: PINKACORD_PS_PORT
         value: "8000"
       - key: PINKACORD_PS_HOST
         value: "0.0.0.0"
+    healthCheckPath: /health
+    # Free tier: 750 hours/month total across all services
+    # This service alone uses ~744 hours running 24/7
+
+  # ── Admin Panel (separate service, runs when needed) ─────────────────────
+  - type: web
+    name: pinkacord-admin
+    runtime: docker
+    dockerfilePath: ./Dockerfile.admin
+    envVars:
+      - key: PINKACORD_ADMIN_PASSWORD
+        sync: false # set in Render dashboard
       - key: PINKACORD_ADMIN_PORT
         value: "8001"
       - key: PINKACORD_ADMIN_BIND
-        value: "127.0.0.1" # admin panel stays internal
+        value: "0.0.0.0"
     healthCheckPath: /health
-    # Free tier: 750 hours/month, spins down after 15 min inactivity
-    # Set up UptimeRobot (free) to ping /health every 5 minutes to keep alive
+    # NOTE: Two free services 24/7 = 1488 hours (over 750 limit).
+    # Stop this service when not managing content to stay under limit.
