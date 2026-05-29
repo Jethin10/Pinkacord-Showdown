@@ -67,16 +67,17 @@ VOLUME ["/app/logs", "/app/databases", "/app/content"]
 RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord && chown -R node:node /app/logs /app/databases /app/content
 USER node
 
-# Documented for orchestrators; bind at runtime via env vars if you need 0.0.0.0.
+# Override .npmrc's 3GB heap limit for constrained environments (Render free = 512MB).
+# With subprocesses: 0, the server uses ~150MB. 384MB heap leaves room for OS overhead.
 ENV PINKACORD_PS_PORT=8000 \
     PINKACORD_ADMIN_PORT=8001 \
-    PINKACORD_ADMIN_BIND=0.0.0.0
+    PINKACORD_ADMIN_BIND=0.0.0.0 \
+    NODE_OPTIONS="--max-old-space-size=384"
 EXPOSE 8000 8001
 
-# Health: the admin panel's /health requires no auth and 200s when the process
-# is up. Fly.io and most orchestrators read this directly.
+# Health check hits the PS server's /health endpoint (works in both normal and PS_ONLY modes).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+process.env.PINKACORD_ADMIN_PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PINKACORD_PS_PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # tools/launcher.js is PID 1. It wires SIGTERM/SIGINT to both child processes.
 ENTRYPOINT ["node", "tools/launcher.js"]
