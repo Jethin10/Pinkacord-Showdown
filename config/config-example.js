@@ -86,7 +86,9 @@ exports.proxyip = false;
 
 // subprocesses - the number of child processes to use for various tasks.
 //   Can be set to `0` instead of `{...}` to stop using subprocesses, if you're running out of RAM.
-exports.subprocesses = {
+//   PINKACORD: defaults to 0 (single process). Multi-process forks ~13 children at boot, each
+//   loading its own engine copy, which OOMs a 512MB host. Opt back in with PINKACORD_HIGH_MEMORY=1.
+exports.subprocesses = (process.env.PINKACORD_HIGH_MEMORY === '1' || process.env.PINKACORD_HIGH_MEMORY === 'true') ? {
 	/**
 	 * network - the number of networking child processes to spawn
 	 *   This should be no greater than the number of threads available on your
@@ -126,7 +128,7 @@ exports.subprocesses = {
 	battlesearch: 1,
 	/** datasearch - for the datasearch chat plugin */
 	datasearch: 1,
-};
+} : 0;
 
 /**
  * Various debug options
