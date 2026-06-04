@@ -86,8 +86,17 @@ exports.proxyip = false;
 
 // subprocesses - the number of child processes to use for various tasks.
 //   Set to 0 to run everything in the main process (saves RAM on constrained hosts).
-//   On Render free tier (512MB), we must use 0 to avoid OOM.
-exports.subprocesses = process.env.PINKACORD_LOW_MEMORY ? 0 : {
+//
+//   DEFAULT IS 0 (single process) for this fork, because the multi-process mode
+//   forks ~13 child processes at boot (network/simulator/validator/verifier/...),
+//   each loading its own copy of the engine, which OOMs a 512MB free instance
+//   before the server finishes starting. Single-process boots at ~90MB.
+//
+//   To opt back IN to multi-process mode (only on a host with plenty of RAM),
+//   set PINKACORD_HIGH_MEMORY=1. The old PINKACORD_LOW_MEMORY flag is still
+//   honored but is now redundant since low-memory is the default.
+const PINKACORD_HIGH_MEMORY = process.env.PINKACORD_HIGH_MEMORY === '1' || process.env.PINKACORD_HIGH_MEMORY === 'true';
+exports.subprocesses = !PINKACORD_HIGH_MEMORY ? 0 : {
 	/**
 	 * network - the number of networking child processes to spawn
 	 *   This should be no greater than the number of threads available on your
@@ -128,6 +137,14 @@ exports.subprocesses = process.env.PINKACORD_LOW_MEMORY ? 0 : {
 	/** datasearch - for the datasearch chat plugin */
 	datasearch: 1,
 };
+
+// Boot diagnostic — shows in Render logs (prefixed [ps]) so we can confirm the
+// process mode without guessing. Single-process is required on 512MB hosts.
+console.log(
+	'[config] subprocesses=' + (exports.subprocesses === 0 ? '0 (single-process / low-memory)' : 'multi-process') +
+	' | HIGH_MEMORY=' + (process.env.PINKACORD_HIGH_MEMORY || '(unset)') +
+	' | LOW_MEMORY=' + (process.env.PINKACORD_LOW_MEMORY || '(unset)')
+);
 
 /**
  * Various debug options
