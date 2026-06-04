@@ -7,6 +7,13 @@ services:
     envVars:
       - key: PINKACORD_PS_ONLY
         value: "1"
+      # CRITICAL for the 512MB free tier: forces subprocesses=0 (single process).
+      # Without this, PS spawns ~13 child processes at boot (one per role:
+      # network/simulator/validator/verifier/modlog/chatdb/...), each loading its
+      # own copy of the engine, and the container OOMs past 512Mi before it
+      # finishes starting. See config/config.js `exports.subprocesses`.
+      - key: PINKACORD_LOW_MEMORY
+        value: "1"
       - key: PORT
         value: "8000"
       - key: PINKACORD_PS_PORT

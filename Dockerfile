@@ -68,10 +68,17 @@ RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord && chown -R node:node 
 USER node
 
 # Override .npmrc's 3GB heap limit for constrained environments (Render free = 512MB).
-# With subprocesses: 0, the server uses ~150MB. 384MB heap leaves room for OS overhead.
+# With subprocesses: 0, the server uses ~90MB RSS. 384MB heap leaves room for OS overhead.
+#
+# PINKACORD_LOW_MEMORY=1 is the load-bearing line for free-tier hosting: it makes
+# config/config.js set `subprocesses: 0` so the whole server runs in ONE process.
+# Without it, PS forks ~13 child processes at boot (one per role), each loading its
+# own engine copy, and the container OOMs past 512Mi before it finishes starting.
+# Baked in here as a safety net; render.yaml also sets it explicitly.
 ENV PINKACORD_PS_PORT=8000 \
     PINKACORD_ADMIN_PORT=8001 \
     PINKACORD_ADMIN_BIND=0.0.0.0 \
+    PINKACORD_LOW_MEMORY=1 \
     NODE_OPTIONS="--max-old-space-size=384"
 EXPOSE 8000 8001
 
