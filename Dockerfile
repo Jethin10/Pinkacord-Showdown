@@ -23,7 +23,7 @@ RUN npm ci --no-audit --no-fund
 # layers for `COPY . .` and the build steps, which can ship a STALE config.js even
 # after you've committed changes. This was the cause of the 512Mi boot OOM
 # persisting across deploys: the running image predated the single-process fix.
-ARG CACHE_BUST=2026-06-04-1
+ARG CACHE_BUST=2026-06-04-2
 RUN echo "cache bust: ${CACHE_BUST}"
 
 COPY . .
@@ -89,11 +89,20 @@ USER node
 # Without it, PS forks ~13 child processes at boot (one per role), each loading its
 # own engine copy, and the container OOMs past 512Mi before it finishes starting.
 # Baked in here as a safety net; render.yaml also sets it explicitly.
+#
+# MALLOC_ARENA_MAX=2 — THE fix for "62MB locally but 512MB+ on Render". glibc malloc
+# allocates one ~64MB memory arena PER CPU CORE. Render's host reports many cores, so
+# a single-process Node balloons to 8+ arenas (8x RSS) even though the heap is tiny.
+# Capping arenas to 2 keeps RSS near the real heap size. This is the classic cause of
+# "fine on my machine, OOMs in the cloud" for Node containers.
+# UV_THREADPOOL_SIZE=2 trims libuv's worker threads (each has its own stack) similarly.
 ENV PINKACORD_PS_PORT=8000 \
     PINKACORD_ADMIN_PORT=8001 \
     PINKACORD_ADMIN_BIND=0.0.0.0 \
     PINKACORD_LOW_MEMORY=1 \
-    NODE_OPTIONS="--max-old-space-size=384"
+    MALLOC_ARENA_MAX=2 \
+    UV_THREADPOOL_SIZE=2 \
+    NODE_OPTIONS="--max-old-space-size=320 --max-semi-space-size=2"
 EXPOSE 8000 8001
 
 # Health check hits the PS server's /health endpoint (works in both normal and PS_ONLY modes).

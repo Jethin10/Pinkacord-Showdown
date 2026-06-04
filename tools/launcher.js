@@ -48,6 +48,27 @@ const NODE = process.execPath;
 })();
 
 // ────────────────────────────────────────────────────────────────────────────
+// Low-memory environment hardening (set BEFORE spawning children so they inherit it)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// These make the difference between "62MB locally" and ">512MB on Render".
+// glibc malloc creates ~one 64MB arena PER CPU CORE; cloud hosts report many
+// cores, so a single Node process balloons to 8x its real heap. We set these
+// here in the launcher (PID 1) so they apply no matter how the image was built
+// or which env vars Render did/didn't sync — the spawned PS child inherits them.
+// Only force them on if the operator hasn't explicitly opted into high memory.
+if (process.env.PINKACORD_HIGH_MEMORY !== "1" && process.env.PINKACORD_HIGH_MEMORY !== "true") {
+	if (!process.env.MALLOC_ARENA_MAX) process.env.MALLOC_ARENA_MAX = "2";
+	if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = "2";
+	if (!process.env.NODE_OPTIONS || !process.env.NODE_OPTIONS.includes("max-old-space-size")) {
+		process.env.NODE_OPTIONS = ((process.env.NODE_OPTIONS || "") + " --max-old-space-size=320 --max-semi-space-size=2").trim();
+	}
+	console.log("[launcher] low-memory env: MALLOC_ARENA_MAX=" + process.env.MALLOC_ARENA_MAX +
+		" UV_THREADPOOL_SIZE=" + process.env.UV_THREADPOOL_SIZE +
+		" NODE_OPTIONS='" + process.env.NODE_OPTIONS + "'");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Required state checks before we spawn anything
 // ────────────────────────────────────────────────────────────────────────────
 
