@@ -18,10 +18,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
+# Cache-bust: bump CACHE_BUST (or pass --build-arg CACHE_BUST=<timestamp>) to force
+# everything below this line to rebuild. Render's BuildKit otherwise reuses CACHED
+# layers for `COPY . .` and the build steps, which can ship a STALE config.js even
+# after you've committed changes. This was the cause of the 512Mi boot OOM
+# persisting across deploys: the running image predated the single-process fix.
+ARG CACHE_BUST=2026-06-04-1
+RUN echo "cache bust: ${CACHE_BUST}"
+
 COPY . .
 
 # Use committed config.js if it exists, otherwise fall back to the example.
+# Both config.js and config-example.js default to single-process (subprocesses=0)
+# unless PINKACORD_HIGH_MEMORY=1 is set, so either path is safe on a 512MB host.
 RUN if [ -f config/config.js ]; then echo "using committed config.js"; else cp config/config-example.js config/config.js; fi
+
+# Fail the build loudly if the config does NOT resolve to single-process by default.
+# Cheap insurance against a future edit silently reintroducing the multi-process OOM.
+RUN node -e "const c=require('./config/config.js'); if (c.subprocesses!==0) { console.error('FATAL: subprocesses must default to 0 (got '+JSON.stringify(c.subprocesses)+')'); process.exit(1);} console.log('config check OK: subprocesses=0');"
 
 # Phase 1: PS TypeScript build
 RUN node build force
