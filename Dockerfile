@@ -96,12 +96,16 @@ USER node
 # Capping arenas to 2 keeps RSS near the real heap size. This is the classic cause of
 # "fine on my machine, OOMs in the cloud" for Node containers.
 # UV_THREADPOOL_SIZE=2 trims libuv's worker threads (each has its own stack) similarly.
+# GOMAXPROCS=1 caps esbuild's native Go binary, which sizes itself to reported CPU
+# cores — only matters if a build ever runs inside the container (launcher passes
+# --skip-build in normal operation), but cheap insurance against another silent OOM.
 ENV PINKACORD_PS_PORT=8000 \
     PINKACORD_ADMIN_PORT=8001 \
     PINKACORD_ADMIN_BIND=0.0.0.0 \
     PINKACORD_LOW_MEMORY=1 \
     MALLOC_ARENA_MAX=2 \
     UV_THREADPOOL_SIZE=2 \
+    GOMAXPROCS=1 \
     NODE_OPTIONS="--max-old-space-size=320 --max-semi-space-size=2"
 EXPOSE 8000 8001
 

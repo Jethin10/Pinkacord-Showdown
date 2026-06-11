@@ -166,13 +166,23 @@ function shutdown(code) {
 	}, 5000).unref();
 }
 
+// --skip-build is CRITICAL on memory-constrained hosts: without it, the
+// pokemon-showdown bin runs `node build` on EVERY server start, and
+// tools/build-utils.js transpile() is NOT incremental — it re-compiles the
+// entire repo through esbuild's native (Go) binary each boot. That process
+// ignores MALLOC_ARENA_MAX and --max-old-space-size, allocates per CPU core
+// (cloud hosts report 16+), and OOMs a 512MB container before the server
+// ever binds its port. dist/ is prebuilt in the Docker image (and the
+// dist-missing fallback above rebuilds it if not), so skipping is safe.
+const PS_ARGS = ["pokemon-showdown", psPort, "--skip-build"];
+
 if (PS_ONLY) {
-	console.log("[launcher] starting PS server only on " + psPort + " (PS_ONLY mode)");
-	const ps = spawnChild("ps", NODE, ["pokemon-showdown", psPort]);
+	console.log("[launcher] starting PS server only on " + psPort + " (PS_ONLY mode, --skip-build)");
+	const ps = spawnChild("ps", NODE, PS_ARGS);
 	wireExit("ps", ps);
 } else {
 	console.log("[launcher] starting PS server on " + psPort + " and admin panel on " + adminPort);
-	const ps = spawnChild("ps", NODE, ["pokemon-showdown", psPort]);
+	const ps = spawnChild("ps", NODE, PS_ARGS);
 	wireExit("ps", ps);
 	// Give PS a brief head start so the admin's first health-check sees it up.
 	setTimeout(() => {
