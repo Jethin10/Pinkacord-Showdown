@@ -78,7 +78,10 @@ COPY --from=build /app/content ./content
 VOLUME ["/app/logs", "/app/databases", "/app/content"]
 
 # Drop privileges to the stock node user.
-RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord && chown -R node:node /app/logs /app/databases /app/content
+# logs/repl must exist at boot: lib/repl.ts cleanup() does a readdir on it and
+# crashes the server with ENOENT otherwise (locally `node build` masks this by
+# running in a repo where logs/repl is already present).
+RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord /app/logs/repl && chown -R node:node /app/logs /app/databases /app/content
 USER node
 
 # Override .npmrc's 3GB heap limit for constrained environments (Render free = 512MB).
