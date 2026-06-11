@@ -20,6 +20,7 @@ import { crashlogger, ProcessManager, Streams } from '../lib';
 import { IPTools } from './ip-tools';
 import { type ChannelID, extractChannelMessages } from '../sim/battle';
 import { StaticServer } from '../lib/static-server';
+import { getAdminProxyPath } from './pinkacord-admin-proxy';
 
 type StreamWorker = ProcessManager.StreamWorker;
 
@@ -450,8 +451,37 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 				});
 			};
 			const proxyAssetRegex = /^\/(?:sprites|audio)\//;
+			// Admin panel reverse proxy: in hosted mode the admin server runs in
+			// this same container on 127.0.0.1:<adminPort> (never exposed
+			// directly). /admin serves its SPA and /admin/api/* reaches its API,
+			// so one Render service provides both the game and the panel.
+			const ADMIN_PORT = Number(process.env.PINKACORD_ADMIN_PORT || 8001);
+			const proxyAdmin = (req: http.IncomingMessage, res: http.ServerResponse) => {
+				const targetPath = getAdminProxyPath(req.url) || '/';
+				const headers = { ...req.headers };
+				delete headers.host;
+				const proxyReq = http.request({
+					hostname: '127.0.0.1',
+					port: ADMIN_PORT,
+					method: req.method,
+					path: targetPath,
+					headers,
+				}, proxyRes => {
+					res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+					proxyRes.pipe(res);
+				});
+				proxyReq.on('error', () => {
+					res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' });
+					res.end('<h2>Admin panel is starting up…</h2><p>Refresh in a few seconds.</p>');
+				});
+				req.pipe(proxyReq);
+			};
 			const staticRequestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
 				// console.log(`static rq: ${req.socket.remoteAddress}:${req.socket.remotePort} -> ${req.socket.localAddress}:${req.socket.localPort} - ${req.method} ${req.url} ${req.httpVersion} - ${req.rawHeaders.join('|')}`);
+				if (getAdminProxyPath(req.url)) {
+					proxyAdmin(req, res);
+					return;
+				}
 				if (req.url && actionPhpRegex.test(req.url)) {
 					proxyLogin(req, res);
 					return;

@@ -39,6 +39,7 @@ import {
 	isRateLimited, recordLoginAttempt, parseCookies, SESSION_COOKIE,
 } from "./auth";
 import { runHotpatch, isBotConfigured } from "./hotpatch";
+import { computeDrift, publishContent, isPublishConfigured, PublishError } from "./github";
 import { abilitiesAll, movesAll, speciesAll, itemsAll, speciesDetailAll, movesDetailAll, learnsetFor, speciesForMod } from "./psdex";
 import { parseAbilityDescription } from "./ability-nlp";
 import { parseAbilityWithLLM, isLLMConfigured } from "./llm";
@@ -46,6 +47,11 @@ import { designMechanic } from "./mechanics-studio";
 import { writeSpriteFromBase64, deleteSprite, hasSprite, spriteExtFor, spriteUrlFor, SpriteError } from "./sprites";
 import { HTML, SCRIPT } from "./ui";
 
+// Hosted mode (Render/Fly free tier): no persistent disk, PS server in the
+// same container. "Deploy" means committing content/ to GitHub (which triggers
+// a Render rebuild) instead of an in-container esbuild rebuild — the latter
+// would OOM a 512MB instance.
+const HOSTED = process.env.PINKACORD_HOSTED === "1";
 const PORT = Number(process.env.PINKACORD_ADMIN_PORT || 8001);
 const BIND = process.env.PINKACORD_ADMIN_BIND || "127.0.0.1";
 const PASSWORD = process.env.PINKACORD_ADMIN_PASSWORD || "";
@@ -138,7 +144,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 
 	if (method === "GET" && pathname === "/api/me") {
 		const sess = requireAuth(req);
-		return sendJson(res, 200, { ok: true, authed: !!sess, displayName: sess?.displayName ?? null, botConfigured: isBotConfigured() });
+		return sendJson(res, 200, {
+			ok: true, authed: !!sess, displayName: sess?.displayName ?? null,
+			botConfigured: isBotConfigured(),
+			hosted: HOSTED,
+			publishConfigured: isPublishConfigured(),
+		});
 	}
 
 	// Health endpoint — no auth, used by orchestrators (Fly.io, Docker, etc.)
@@ -290,7 +301,54 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 		return handleEntity(req, res, type, id, method, actor);
 	}
 
-	if (method === "POST" && pathname === "/api/build") return handleBuild(req, res, actor);
+	// Hosted-mode publish: validate content via the generator (no esbuild —
+	// safe on 512MB), then commit content/ to GitHub. Render auto-deploys.
+	if (method === "GET" && pathname === "/api/publish/status") {
+		try {
+			const drift = await computeDrift(REPO_ROOT);
+			return sendJson(res, 200, { ok: true, configured: true, changed: drift.changed, headSha: drift.headSha });
+		} catch (e: any) {
+			if (e instanceof PublishError && e.code === "not_configured") {
+				return sendJson(res, 200, { ok: true, configured: false, changed: [] });
+			}
+			return sendJson(res, 502, { ok: false, code: e.code ?? "github_error", message: e.message ?? String(e) });
+		}
+	}
+	if (method === "POST" && pathname === "/api/publish") {
+		let summary = "";
+		try { summary = String(JSON.parse(await readBody(req)).summary || "").slice(0, 120); } catch { /* optional body */ }
+		try {
+			// Validation gate: run the content generator first so a broken
+			// pokedex.json can't be committed and take down the deploy.
+			runGenerator(MOD_ID);
+		} catch (e: any) {
+			if (e instanceof BuildError) {
+				return sendJson(res, 400, { ok: false, code: "validation_failed", message: `${e.file}`, fieldErrors: e.issues });
+			}
+			return sendJson(res, 500, { ok: false, code: "internal", message: e.message ?? String(e) });
+		}
+		try {
+			const result = await publishContent(REPO_ROOT, actor, summary);
+			appendAudit({ actor, action: "publish", meta: { sha: result.sha, files: result.changed.length, summary } });
+			return sendJson(res, 200, { ok: true, sha: result.sha, url: result.url, changed: result.changed });
+		} catch (e: any) {
+			if (e instanceof PublishError) {
+				const status = e.code === "no_changes" ? 409 : e.code === "not_configured" ? 400 : 502;
+				return sendJson(res, status, { ok: false, code: e.code, message: e.message });
+			}
+			return sendJson(res, 500, { ok: false, code: "internal", message: e.message ?? String(e) });
+		}
+	}
+
+	if (method === "POST" && pathname === "/api/build") {
+		if (HOSTED) {
+			return sendJson(res, 400, {
+				ok: false, code: "hosted_mode",
+				message: "In-place builds are disabled on the hosted server (not enough memory). Use Publish instead — it deploys through GitHub.",
+			});
+		}
+		return handleBuild(req, res, actor);
+	}
 	if (method === "POST" && pathname === "/api/hotpatch") return handleHotpatch(req, res, actor);
 	if (method === "GET" && pathname === "/api/hotpatch") {
 		return sendJson(res, 200, {

@@ -1,41 +1,24 @@
 services:
-  # ── PS Game Server (low memory, no admin panel) ──────────────────────────
   - type: web
     name: pinkacord
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
     envVars:
-      - key: PINKACORD_PS_ONLY
+      - key: PINKACORD_HOSTED
         value: "1"
-      # CRITICAL for the 512MB free tier: forces subprocesses=0 (single process).
-      # Without this, PS spawns ~13 child processes at boot (one per role:
-      # network/simulator/validator/verifier/modlog/chatdb/...), each loading its
-      # own copy of the engine, and the container OOMs past 512Mi before it
-      # finishes starting. See config/config.js `exports.subprocesses`.
       - key: PINKACORD_LOW_MEMORY
         value: "1"
-      - key: PORT
-        value: "8000"
-      - key: PINKACORD_PS_PORT
-        value: "8000"
-      - key: PINKACORD_PS_HOST
-        value: "0.0.0.0"
-    healthCheckPath: /health
-    # Free tier: 750 hours/month total across all services
-    # This service alone uses ~744 hours running 24/7
-
-  # ── Admin Panel (separate service, runs when needed) ─────────────────────
-  - type: web
-    name: pinkacord-admin
-    runtime: docker
-    dockerfilePath: ./Dockerfile.admin
-    envVars:
       - key: PINKACORD_ADMIN_PASSWORD
-        sync: false # set in Render dashboard
+        sync: false
       - key: PINKACORD_ADMIN_PORT
         value: "8001"
       - key: PINKACORD_ADMIN_BIND
-        value: "0.0.0.0"
-    healthCheckPath: /health
-    # NOTE: Two free services 24/7 = 1488 hours (over 750 limit).
-    # Stop this service when not managing content to stay under limit.
+        value: "127.0.0.1"
+      - key: PINKACORD_GITHUB_REPO
+        value: Jethin10/Pinkacord-Showdown
+      - key: PINKACORD_GITHUB_BRANCH
+        value: main
+      - key: PINKACORD_GITHUB_TOKEN
+        sync: false

@@ -433,6 +433,8 @@ function deepClone(x) { return JSON.parse(JSON.stringify(x)); }
 function empty(el) { while (el.firstChild) el.removeChild(el.firstChild); }
 function debounce(fn, ms) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); }; }
 function normSearch(s) { return String(s).toLowerCase().trim().replace(/[^a-z0-9\s]/g, ""); }
+const ADMIN_BASE = location.pathname === "/admin" || location.pathname.startsWith("/admin/") ? "/admin" : "";
+function adminApiPath(path) { return ADMIN_BASE + path; }
 
 // ─── API client ──────────────────────────────────────────────────────────────
 let _apiBusyCount = 0;
@@ -457,7 +459,7 @@ async function api(method, path, body) {
 			opts.headers["Content-Type"] = "application/json";
 			opts.body = JSON.stringify(body);
 		}
-		const r = await fetch(path, opts);
+		const r = await fetch(adminApiPath(path), opts);
 		if (r.status === 401) {
 			state.authed = false;
 			state.displayName = null;
@@ -535,6 +537,9 @@ const state = {
 	effects: [],
 	displayName: null,
 	botConfigured: false,
+	hosted: false,
+	publishConfigured: false,
+	publishStatus: null,
 	pendingChanges: 0, // bumped on every successful save; cleared on Apply
 	psAbilities: [],  // lazy-loaded from /api/ps-dex/abilities for autocomplete
 	psSpecies: [],    // lazy-loaded from /api/ps-dex/species for the Format Workshop
@@ -542,9 +547,38 @@ const state = {
 	customSpecies: [], // lazy-loaded from /api/species for the Format Workshop
 	customAbilities: [], // lazy-loaded from /api/abilities so the species editor can pick them
 	customMoves: [],     // lazy-loaded from /api/moves for the learnset editor
+	customItems: [],
 	_modSpecies: {},     // lazy-loaded { modId: speciesName[] } for gen-aware banlist filtering
 	psUrl: "http://localhost:8000/", // best-effort link to the PS server (heuristic from current host)
 };
+
+function applyMe(me) {
+	state.authed = !!me.authed;
+	state.displayName = me.displayName;
+	state.botConfigured = !!me.botConfigured;
+	state.hosted = !!me.hosted;
+	state.publishConfigured = !!me.publishConfigured;
+}
+function changedFileCount() {
+	return state.publishStatus && Array.isArray(state.publishStatus.changed) ? state.publishStatus.changed.length : 0;
+}
+function pendingCount() {
+	return Math.max(state.pendingChanges || 0, changedFileCount());
+}
+function markPendingChange() {
+	state.pendingChanges++;
+	state.publishStatus = null;
+}
+async function refreshPublishStatus() {
+	if (!state.hosted) return;
+	try {
+		const r = await api("GET", "/api/publish/status");
+		state.publishConfigured = !!r.configured;
+		state.publishStatus = { changed: r.changed || [], headSha: r.headSha || null };
+	} catch (err) {
+		state.publishStatus = { changed: [], error: err.message || String(err) };
+	}
+}
 
 function setToast(kind, text, durationMs) {
 	const existing = $(".toast"); if (existing) existing.remove();
@@ -554,7 +588,7 @@ function setToast(kind, text, durationMs) {
 }
 
 async function prefetchAfterAuth() {
-	try { const me = await api("GET", "/api/me"); state.botConfigured = !!me.botConfigured; } catch {}
+	try { const me = await api("GET", "/api/me"); applyMe(me); } catch {}
 	try { const eff = await api("GET", "/api/effects"); state.effects = eff.effects; } catch {}
 	try { const a = await api("GET", "/api/ps-dex/abilities"); state.psAbilities = a.items; } catch {}
 	try { const s = await api("GET", "/api/ps-dex/species-detail"); state.psSpecies = s.items; } catch {}
@@ -562,13 +596,18 @@ async function prefetchAfterAuth() {
 	try { const c = await api("GET", "/api/species"); state.customSpecies = c.items || []; } catch {}
 	try { const ca = await api("GET", "/api/abilities"); state.customAbilities = ca.items || []; } catch {}
 	try { const cm = await api("GET", "/api/moves"); state.customMoves = cm.items || []; } catch {}
+	try { const ci = await api("GET", "/api/items"); state.customItems = ci.items || []; } catch {}
 	try { const cl = await api("GET", "/api/learnsets"); state.customLearnsets = cl.items || []; } catch {}
 	try { const cf = await api("GET", "/api/formats"); state.customFormats = cf.items || []; } catch {}
+	await refreshPublishStatus();
 	// Heuristic for the PS server URL: if we're on host:port, PS is typically host:8000.
 	// Override via env-driven server response later if needed.
 	try {
-		const host = location.hostname || "localhost";
-		state.psUrl = location.protocol + "//" + host + ":8000/";
+		if (state.hosted) state.psUrl = location.origin + "/";
+		else {
+			const host = location.hostname || "localhost";
+			state.psUrl = location.protocol + "//" + host + ":8000/";
+		}
 	} catch {}
 }
 
@@ -577,9 +616,7 @@ window.addEventListener("hashchange", () => { renderRouted(); });
 async function boot() {
 	try {
 		const me = await api("GET", "/api/me");
-		state.authed = me.authed;
-		state.displayName = me.displayName;
-		state.botConfigured = !!me.botConfigured;
+		applyMe(me);
 	} catch { state.authed = false; }
 	if (state.authed) {
 		await prefetchAfterAuth();
@@ -602,8 +639,10 @@ function render() {
 
 function maybeRenderFab() {
 	const existing = $(".fab"); if (existing) existing.remove();
-	if (state.pendingChanges <= 0) return;
-	const label = state.botConfigured
+	if (pendingCount() <= 0) return;
+	const label = state.hosted
+		? "Publish saved changes"
+		: state.botConfigured
 		? "⚡ Save changes — Build & push live"
 		: "⚡ Build now (then paste /hotpatch)";
 	const fab = el("div", { class: "fab" },
@@ -734,7 +773,7 @@ function renderHome() {
 		{ emoji: "1", label: "Create a Pokémon", desc: "Add a custom species with name, type, stats, and sprite.", action: () => openEditor("species", null), btn: "+  Add Pokémon" },
 		{ emoji: "2", label: "Add a move", desc: "Create a signature move for your Pokémon — or let AI write it.", action: () => openEditor("moves", null), btn: "+  Add move" },
 		{ emoji: "3", label: "Create a format", desc: "Build a format that uses your custom dex. Pick gens, rules, and bans.", action: () => openEditor("formats", null), btn: "+  New format" },
-		{ emoji: "4", label: "Build & deploy", desc: "Push everything to the live server. Your custom content is ready to battle!", action: doBuildAndApply, btn: "⚡  Build now" },
+		{ emoji: "4", label: state.hosted ? "Publish" : "Build & deploy", desc: state.hosted ? "Commit saved changes to GitHub. Render redeploys them automatically." : "Push everything to the live server. Your custom content is ready to battle!", action: doBuildAndApply, btn: state.hosted ? "Publish" : "⚡  Build now" },
 	];
 	const stepRow = el("div", { style: { display: "flex", gap: ".5rem", flexWrap: "wrap" } });
 	for (const s of steps) {
@@ -769,7 +808,7 @@ function renderHomeActivity() {
 			return;
 		}
 		for (const e of list) {
-			const icons = { create: "✨", update: "✏️", delete: "🗑️", build: "⚡", hotpatch: "🚀", auth: "🔑" };
+			const icons = { create: "✨", update: "✏️", delete: "🗑️", build: "⚡", hotpatch: "🚀", publish: "🚀", auth: "🔑" };
 			const icon = Object.entries(icons).find(([k]) => e.action.includes(k))?.[1] || "•";
 			card.appendChild(el("div", { class: "activity-row" },
 				el("span", { class: "act-icon" }, icon),
@@ -790,22 +829,37 @@ function renderHomeActivity() {
 // Deploy card
 function renderDeployCard() {
 	const card = el("div", { class: "card compact" });
-	card.appendChild(el("h2", {}, "🚀 Build & Deploy"));
+	card.appendChild(el("h2", {}, state.hosted ? "Publish to live server" : "🚀 Build & Deploy"));
 	const status = el("div", { style: { display: "flex", gap: ".5rem", alignItems: "center", flexWrap: "wrap", marginBottom: ".4rem" } });
-	status.appendChild(el("span", { class: "deploy-pill " + (state.botConfigured ? "ok" : "warn") },
-		state.botConfigured ? "🤖 Auto-hotpatch" : "📋 Manual deploy"));
-	if (state.pendingChanges > 0) {
-		status.appendChild(el("span", { class: "deploy-pill pending" }, "● " + state.pendingChanges + " unsaved"));
+	if (state.hosted) {
+		status.appendChild(el("span", { class: "deploy-pill " + (state.publishConfigured ? "ok" : "warn") },
+			state.publishConfigured ? "GitHub publish ready" : "GitHub publish not configured"));
 	} else {
-		status.appendChild(el("span", { class: "deploy-pill clean" }, "✓ Live"));
+		status.appendChild(el("span", { class: "deploy-pill " + (state.botConfigured ? "ok" : "warn") },
+			state.botConfigured ? "🤖 Auto-hotpatch" : "📋 Manual deploy"));
 	}
+	const count = pendingCount();
+	status.appendChild(el("span", { class: "deploy-pill " + (count > 0 ? "pending" : "clean") },
+		count > 0 ? "● " + count + " pending" : "✓ Live"));
 	card.appendChild(status);
+	if (state.hosted) {
+		card.appendChild(el("p", { style: { margin: "0 0 .75rem 0", color: "#5a4a6a", fontSize: ".9rem", lineHeight: "1.45" } },
+			state.publishConfigured
+				? "Publish commits saved content to GitHub. Render will rebuild and restart the server automatically in a few minutes."
+				: "Set PINKACORD_GITHUB_TOKEN and PINKACORD_GITHUB_REPO in Render to enable one-click publishing."));
+		if (state.publishStatus && state.publishStatus.error) {
+			card.appendChild(el("div", { class: "banner error" }, "Publish status check failed: " + state.publishStatus.error));
+		}
+	}
 	const row = el("div", { style: { display: "flex", gap: ".5rem", flexWrap: "wrap" } });
-	row.appendChild(el("button", { class: "primary", disabled: state.pendingChanges === 0, on: { click: doBuildAndApply } }, state.botConfigured ? "⚡ Build & deploy" : "⚡ Build"));
+	row.appendChild(el("button", { class: "primary", disabled: state.hosted ? (!state.publishConfigured || count === 0) : count === 0, on: { click: doBuildAndApply } }, state.hosted ? "Publish & deploy" : (state.botConfigured ? "⚡ Build & deploy" : "⚡ Build")));
+	if (state.hosted) {
+		row.appendChild(el("button", { class: "secondary", on: { click: async () => { await refreshPublishStatus(); render(); } } }, "Refresh status"));
+	}
 	row.appendChild(el("button", { class: "ghost", on: { click: () => { window.open(state.psUrl || "http://localhost:8000/", "_blank"); } } }, "🌐 Open PS"));
 	row.appendChild(el("button", { class: "ghost", on: { click: () => { location.hash = "audit"; } } }, "📜 Log"));
 	card.appendChild(row);
-	if (!state.botConfigured && state.pendingChanges === 0) {
+	if (!state.hosted && !state.botConfigured && count === 0) {
 		const cmds = ["/hotpatch formats", "/hotpatch battles", "/hotpatch teamvalidator"];
 		card.appendChild(el("div", { style: { fontSize: ".75rem", color: "#5a4a6a", marginTop: ".5rem", display: "flex", gap: ".4rem", alignItems: "center" } },
 			el("span", {}, "After Build, paste in PS chat:"),
@@ -894,7 +948,7 @@ function monCard(it) {
 	const spriteBox = el("div", { class: "sprite-box" });
 	if (it._hasSprite !== false) {
 		// Cache-buster by id+name change so we refresh after rename or upload
-		const spriteImg = el("img", { src: "/api/species/" + encodeURIComponent(it.id) + "/sprite/preview?ts=" + Date.now() });
+		const spriteImg = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(it.id) + "/sprite/preview?ts=" + Date.now()) });
 		spriteImg.onerror = () => { spriteImg.style.display = "none"; spriteBox.appendChild(el("div", { style: { fontSize: "2.5rem", opacity: ".3" } }, "✨")); };
 		spriteBox.appendChild(spriteImg);
 	} else {
@@ -1022,7 +1076,7 @@ function openEditorOnTab(type, existing, initialTab) {
 			if (existing && rev) body.__rev = rev;
 			const headers = { "X-Pinkacord-Admin": "1", "Content-Type": "application/json" };
 			if (existing && rev) headers["If-Match"] = rev;
-			const r = await fetch(url, { method, headers, credentials: "same-origin", body: JSON.stringify(body) });
+			const r = await fetch(adminApiPath(url), { method, headers, credentials: "same-origin", body: JSON.stringify(body) });
 			const json = await r.json().catch(() => ({ ok: false, message: "bad response" }));
 			if (!r.ok || !json.ok) {
 				if (stagedSprite) data._stagedSprite = stagedSprite;
@@ -1051,28 +1105,22 @@ function openEditorOnTab(type, existing, initialTab) {
 				try { const ca = await api("GET", "/api/abilities"); state.customAbilities = ca.items || []; } catch {}
 			} else if (type === "moves") {
 				try { const cm = await api("GET", "/api/moves"); state.customMoves = cm.items || []; } catch {}
+			} else if (type === "items") {
+				try { const ci = await api("GET", "/api/items"); state.customItems = ci.items || []; } catch {}
+			} else if (type === "learnsets") {
+				try { const cl = await api("GET", "/api/learnsets"); state.customLearnsets = cl.items || []; } catch {}
+			} else if (type === "formats") {
+				try { const cf = await api("GET", "/api/formats"); state.customFormats = cf.items || []; } catch {}
 			}
-			state.pendingChanges++;
+			markPendingChange();
 			if (opts && opts.thenBuild) {
-				setToast("info", "Saved. Building & applying…");
-				try {
-					const br = await api("POST", "/api/build");
-					if (!br || br.ok === false) {
-						errSlot.appendChild(el("div", { class: "banner error" }, (br && br.message) || "Build failed."));
-						if (br && br.fieldErrors) for (const fe of br.fieldErrors) errSlot.appendChild(el("div", { class: "field-error" }, "• " + fe));
-						return false;
-					}
-				} catch (err) {
-					errSlot.appendChild(el("div", { class: "banner error" }, "Build failed: " + (err.message || err)));
-					return false;
-				}
 				close();
-				setToast("success", "Saved + built + applied: " + (data.name || data.id));
 				render();
+				await doBuildAndApply();
 				return true;
 			}
 			close();
-			setToast("success", "Saved " + (data.name || data.id) + ". Click ⚡ Apply to make it live.");
+			setToast("success", "Saved " + (data.name || data.id) + ". Click " + (state.hosted ? "Publish" : "⚡ Apply") + " to make it live.");
 			render();
 			return true;
 		} catch (err) { errSlot.appendChild(el("div", { class: "banner error" }, err.message)); return false; }
@@ -1084,13 +1132,13 @@ function openEditorOnTab(type, existing, initialTab) {
 		),
 		bodySlot,
 		el("div", { class: "modal-foot" },
-			el("div", { style: { fontSize: ".8rem", color: "#888" } }, existing ? "Editing • saved → not yet applied" : "Will be added when you save"),
+			el("div", { style: { fontSize: ".8rem", color: "#888" } }, existing ? "Editing • saved → not yet live" : "Will be added when you save"),
 			el("div", {},
 				el("button", { class: "secondary", on: { click: close } }, "Cancel"),
 				" ",
 				el("button", { class: "secondary", on: { click: () => save() } }, "💾 Save"),
 				" ",
-				el("button", { class: "primary", on: { click: () => save({ thenBuild: true }) } }, "⚡ Save & Apply"),
+				el("button", { class: "primary", on: { click: () => save({ thenBuild: true }) } }, state.hosted ? "Save & Publish" : "⚡ Save & Apply"),
 			),
 		),
 	);
@@ -1283,7 +1331,7 @@ function renderSpeciesSprite(d) {
 		if (d._stagedSprite) {
 			previewBox.appendChild(el("img", { src: "data:image/png;base64," + d._stagedSprite }));
 		} else if (d.id) {
-			const img = el("img", { src: "/api/species/" + encodeURIComponent(d.id) + "/sprite/preview?ts=" + Date.now() });
+			const img = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(d.id) + "/sprite/preview?ts=" + Date.now()) });
 			img.onerror = () => { img.style.display = "none"; previewBox.appendChild(el("div", { style: { fontSize: "2rem", opacity: ".3" } }, "✨")); };
 			previewBox.appendChild(img);
 		} else {
@@ -1315,8 +1363,8 @@ function renderSpeciesSprite(d) {
 				}
 				try {
 					await api("POST", "/api/species/" + encodeURIComponent(d.id) + "/sprite", { data: base64 });
-					state.pendingChanges++;
-					setToast("success", "Sprite uploaded. Click ⚡ Apply to deploy it.");
+					markPendingChange();
+					setToast("success", "Sprite uploaded. Click " + (state.hosted ? "Publish" : "⚡ Apply") + " to deploy it.");
 					refresh();
 					render();
 				} catch (err) { setToast("error", "Upload failed: " + (err.message || "unknown")); }
@@ -1333,7 +1381,7 @@ function renderSpeciesSprite(d) {
 				if (!confirm("Remove sprite for " + d.id + "?")) return;
 				try {
 					await api("DELETE", "/api/species/" + encodeURIComponent(d.id) + "/sprite");
-					state.pendingChanges++;
+					markPendingChange();
 					setToast("success", "Sprite removed.");
 					refresh(); render();
 				} catch (err) { setToast("error", "Delete failed: " + (err.message || "unknown")); }
@@ -2801,7 +2849,7 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 			const status = entryStatus(it.name);
 			if (pane === "species") {
 				const sprite = it.custom
-					? ("/api/species/" + normalizeName(it.name) + "/sprite/preview")
+					? adminApiPath("/api/species/" + normalizeName(it.name) + "/sprite/preview")
 					: ("https://play.pokemonshowdown.com/sprites/gen5/" + normalizeName(it.name) + ".png");
 				const fallbackSprite = "https://play.pokemonshowdown.com/sprites/dex/" + normalizeName(it.name) + ".png";
 				const imgEl = el("img", { src: sprite, loading: "lazy", class: "fc-mon-sprite", alt: "" });
@@ -3042,7 +3090,7 @@ function renderSpritesGallery() {
 				} } });
 				const spriteBox = el("div", { class: "sprite-box" });
 				if (s.hasSprite) {
-					const img = el("img", { src: "/api/species/" + encodeURIComponent(s.id) + "/sprite/preview?ts=" + Date.now() });
+					const img = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(s.id) + "/sprite/preview?ts=" + Date.now()) });
 					img.onerror = () => { img.style.display = "none"; spriteBox.appendChild(el("div", { style: { fontSize: "2rem", opacity: ".3" } }, "?")); };
 					spriteBox.appendChild(img);
 				} else {
@@ -3105,7 +3153,7 @@ function renderAudit() {
 			return;
 		}
 		for (const e of r.entries) {
-			const icon = e.action.startsWith("auth") ? "🔑" : e.action.startsWith("build") ? "⚡" : e.action.startsWith("hotpatch") ? "🚀" : e.action.startsWith("sprite") ? "🎨" : e.action.includes("create") ? "✨" : e.action.includes("update") ? "✏️" : e.action.includes("delete") ? "🗑️" : "•";
+			const icon = e.action.startsWith("auth") ? "🔑" : e.action.startsWith("publish") ? "🚀" : e.action.startsWith("build") ? "⚡" : e.action.startsWith("hotpatch") ? "🚀" : e.action.startsWith("sprite") ? "🎨" : e.action.includes("create") ? "✨" : e.action.includes("update") ? "✏️" : e.action.includes("delete") ? "🗑️" : "•";
 			slot.appendChild(el("div", { class: "audit-entry" },
 				el("div", { class: "icon" }, icon),
 				el("div", { class: "body" },
@@ -3122,6 +3170,7 @@ function renderAudit() {
 
 // ─── Actions ────────────────────────────────────────────────────────────────
 async function doBuildAndApply() {
+	if (state.hosted) return doPublishAndDeploy();
 	// Check for unsaved changes in an open editor modal
 	const openModal = $(".modal-overlay");
 	if (openModal) {
@@ -3156,17 +3205,45 @@ async function doBuildAndApply() {
 		setToast("error", "Build OK but hotpatch failed: " + (err.message || "unknown") + ". Open Home → Deploy and paste the manual commands.", 12000);
 	}
 }
+async function doPublishAndDeploy() {
+	const openModal = $(".modal-overlay");
+	if (openModal) {
+		if (!confirm("You have an editor open with unsaved changes. Publish will NOT include those changes.\n\nClose the editor first, then Save & Publish. Continue publish anyway?")) return;
+	}
+	if (!state.publishConfigured) {
+		setToast("error", "GitHub publish is not configured on the server. Add the GitHub env vars in Render first.", 10000);
+		return;
+	}
+	if (!confirm("Publish saved changes to GitHub?\n\nRender will rebuild and restart the server automatically. Battles in progress may end during the restart.")) return;
+	setToast("info", "Publishing to GitHub…");
+	try {
+		const result = await api("POST", "/api/publish", { summary: "admin panel update" });
+		state.pendingChanges = 0;
+		state.publishStatus = { changed: [], headSha: result.sha };
+		await refreshPublishStatus();
+		render();
+		setToast("success", "Published " + result.changed.length + " file(s). Render is redeploying now; changes should be live in a few minutes.", 12000);
+	} catch (err) {
+		const detail = err.fieldErrors && err.fieldErrors.length ? "\n• " + err.fieldErrors.slice(0, 5).join("\n• ") : "";
+		if (err.code === "no_changes") {
+			state.pendingChanges = 0;
+			await refreshPublishStatus();
+			render();
+		}
+		setToast("error", "Publish failed: " + (err.message || "unknown error") + detail, 12000);
+	}
+}
 async function doLogout() {
 	try { await api("POST", "/api/logout"); } catch {}
 	state.authed = false; state.displayName = null; location.hash = ""; renderRouted();
 }
 async function confirmDelete(type, item) {
 	const name = item.data.name || item.data.species || item.id;
-	if (!confirm("Delete \"" + name + "\"?\n\nYou'll need to click ⚡ Apply afterwards to push the deletion to the live server. The change is also recorded in the change log.")) return;
+	if (!confirm("Delete \"" + name + "\"?\n\nYou'll need to click " + (state.hosted ? "Publish" : "⚡ Apply") + " afterwards to push the deletion to the live server. The change is also recorded in the change log.")) return;
 	try {
 		await api("DELETE", "/api/" + type + "/" + encodeURIComponent(item.id));
-		state.pendingChanges++;
-		setToast("success", "Deleted " + name + ". Click ⚡ Apply when you're ready to push to live.");
+		markPendingChange();
+		setToast("success", "Deleted " + name + ". Click " + (state.hosted ? "Publish" : "⚡ Apply") + " when you're ready to push to live.");
 		render();
 	} catch (err) {
 		const detail = err.fieldErrors && err.fieldErrors.length ? "\n\n" + err.fieldErrors.join("\n") : "";
