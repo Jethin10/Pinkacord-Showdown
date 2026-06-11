@@ -81,7 +81,9 @@ VOLUME ["/app/logs", "/app/databases", "/app/content"]
 # logs/repl must exist at boot: lib/repl.ts cleanup() does a readdir on it and
 # crashes the server with ENOENT otherwise (locally `node build` masks this by
 # running in a repo where logs/repl is already present).
-RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord /app/logs/repl && chown -R node:node /app/logs /app/databases /app/content
+# config/ must be writable too: PS persists chatrooms.json (and ladders etc.)
+# there at runtime; root-owned config/ makes every room-save crash with EACCES.
+RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord /app/logs/repl && chown -R node:node /app/logs /app/databases /app/content /app/config
 USER node
 
 # Override .npmrc's 3GB heap limit for constrained environments (Render free = 512MB).
