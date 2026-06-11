@@ -22,7 +22,10 @@ Config.defaultserver = Config.server;
 
 Config.routes = {
 	root: 'pokemonshowdown.com',
-	client: 'play.pokemonshowdown.com',
+	// Sprites/icons/cries load from `client`. Use OUR host: some ISPs block
+	// play.pokemonshowdown.com entirely, and the server proxies any asset we
+	// don't ship locally (see proxyAsset in server/sockets.ts).
+	client: location.host,
 };
 
 Config.customcolors = {};
