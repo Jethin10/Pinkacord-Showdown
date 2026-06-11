@@ -372,6 +372,84 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 					proxyReq.end();
 				});
 			};
+			// Asset proxy: the client loads sprites/type icons/cries from
+			// play.pokemonshowdown.com, but some ISPs block that domain outright
+			// (untrusted intercepted cert), leaving users with no images at all.
+			// Config.routes.client now points at THIS host, local files in
+			// server/static win, and anything missing is fetched upstream from
+			// here (where the block doesn't apply) and cached on disk.
+			const ASSET_CACHE_DIR = path.resolve('logs', 'asset-cache');
+			const assetContentTypes: { [ext: string]: string } = {
+				'.png': 'image/png', '.gif': 'image/gif', '.jpg': 'image/jpeg',
+				'.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+				'.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+			};
+			const proxyAsset = (req: http.IncomingMessage, res: http.ServerResponse) => {
+				const urlPath = (req.url || '').split('?')[0];
+				const cacheFile = path.join(ASSET_CACHE_DIR, urlPath);
+				if (
+					urlPath.includes('..') || urlPath.includes('\0') ||
+					!path.resolve(cacheFile).startsWith(ASSET_CACHE_DIR + path.sep)
+				) {
+					res.writeHead(400, { 'Content-Type': 'text/plain' });
+					res.end('bad path');
+					return;
+				}
+				const headers = {
+					'Content-Type': assetContentTypes[path.extname(urlPath).toLowerCase()] || 'application/octet-stream',
+					'Cache-Control': 'public, max-age=604800',
+				};
+				fs.readFile(cacheFile, (cacheErr, cached) => {
+					if (!cacheErr) {
+						res.writeHead(200, headers);
+						res.end(cached);
+						return;
+					}
+					const fetchUpstream = (hostname: string, upstreamPath: string, redirectsLeft: number) => {
+						const upstreamReq = https.get({
+							hostname,
+							path: upstreamPath,
+							headers: { 'user-agent': 'pinkacord-showdown' },
+						}, upstreamRes => {
+							const status = upstreamRes.statusCode || 502;
+							const loc = upstreamRes.headers.location;
+							if (loc && redirectsLeft > 0 && [301, 302, 307, 308].includes(status)) {
+								upstreamRes.resume();
+								try {
+									const u = new URL(loc, `https://${hostname}${upstreamPath}`);
+									fetchUpstream(u.hostname, u.pathname + u.search, redirectsLeft - 1);
+								} catch {
+									res.writeHead(502, { 'Content-Type': 'text/plain' });
+									res.end('bad upstream redirect');
+								}
+								return;
+							}
+							if (status !== 200) {
+								res.writeHead(status, { 'Content-Type': 'text/plain' });
+								res.end(`upstream ${status}`);
+								upstreamRes.resume();
+								return;
+							}
+							const chunks: Buffer[] = [];
+							upstreamRes.on('data', (c: Buffer) => chunks.push(c));
+							upstreamRes.on('end', () => {
+								const body = Buffer.concat(chunks);
+								res.writeHead(200, headers);
+								res.end(body);
+								fs.mkdir(path.dirname(cacheFile), { recursive: true }, err => {
+									if (!err) fs.writeFile(cacheFile, body, () => {});
+								});
+							});
+						});
+						upstreamReq.on('error', () => {
+							res.writeHead(502, { 'Content-Type': 'text/plain' });
+							res.end('asset proxy error');
+						});
+					};
+					fetchUpstream('play.pokemonshowdown.com', urlPath, 2);
+				});
+			};
+			const proxyAssetRegex = /^\/(?:sprites|audio)\//;
 			const staticRequestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
 				// console.log(`static rq: ${req.socket.remoteAddress}:${req.socket.remotePort} -> ${req.socket.localAddress}:${req.socket.localPort} - ${req.method} ${req.url} ${req.httpVersion} - ${req.rawHeaders.join('|')}`);
 				if (req.url && actionPhpRegex.test(req.url)) {
@@ -404,6 +482,12 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 
 					void server.serve(req, res, e => {
 						if (e.status === 404) {
+							// Local file wins; fall back to the upstream asset proxy
+							// for sprite/audio paths we don't ship in the image.
+							if (req.method === 'GET' && req.url && proxyAssetRegex.test(req.url)) {
+								proxyAsset(req, res);
+								return true;
+							}
 							void staticServer.serveFile('404.html', 404, {}, req, res);
 							return true;
 						}
