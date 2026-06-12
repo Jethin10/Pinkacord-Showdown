@@ -1,10 +1,10 @@
 /**
- * Pinkacord admin panel — UI bundle.
+ * Pinkacord admin panel — UI bundle (v2 "Slate" redesign).
  *
  * The entire admin UI is one HTML page with inline CSS and JS, served by the
- * admin server as a static string. This rewrite focuses on being approachable
- * for non-developer admins: visual type chips, stat sliders, tabbed editor,
- * inline help, friendly defaults.
+ * admin server as a static string. Dark dashboard layout: fixed sidebar nav,
+ * full-page editors for Pokémon and Formats, slide-over drawers for the
+ * smaller entity types, deploy status pinned to the sidebar footer.
  *
  * Architectural notes that have surfaced as bugs in past iterations:
  *   - Use a FUNCTION replacer in server.ts when injecting SCRIPT into HTML,
@@ -15,6 +15,8 @@
  *   - render*() functions are NOT async — they construct the DOM synchronously
  *     and use .then() to lazy-fill data. Making them async returns a Promise
  *     to appendChild() and the page goes blank.
+ *   - No backticks / "$ {" sequences inside SCRIPT — it lives in a template
+ *     literal. String concatenation only.
  */
 
 export const HTML = String.raw`<!doctype html>
@@ -24,376 +26,461 @@ export const HTML = String.raw`<!doctype html>
 	<meta name="viewport" content="width=device-width,initial-scale=1">
 	<title>Pinkacord Admin</title>
 	<style>
+		:root {
+			--bg: #0d0f15;
+			--panel: #151823;
+			--panel-2: #1b1f2d;
+			--panel-3: #232939;
+			--border: #262c3d;
+			--border-2: #343c54;
+			--text: #e8ebf3;
+			--dim: #99a1b6;
+			--faint: #677089;
+			--pink: #f25fa6;
+			--pink-strong: #ff77b8;
+			--pink-soft: rgba(242, 95, 166, .13);
+			--green: #4ade80;
+			--green-soft: rgba(74, 222, 128, .12);
+			--red: #f87171;
+			--red-soft: rgba(248, 113, 113, .12);
+			--amber: #fbbf24;
+			--amber-soft: rgba(251, 191, 36, .12);
+			--blue: #7aa7ff;
+			--radius: 10px;
+			--radius-sm: 7px;
+			--sidebar-w: 234px;
+			--shadow: 0 8px 28px rgba(0, 0, 0, .45);
+		}
 		* { box-sizing: border-box; }
-		body { margin: 0; font-family: Verdana, Helvetica, Arial, sans-serif; font-size: 11pt; background: #2d3a52; color: #2a2a2a; min-height: 100vh; }
-		body::before { content: ""; position: fixed; inset: 0; background: linear-gradient(180deg, #344b6c 0%, #2a3a55 100%); z-index: -1; }
-		header { background: linear-gradient(180deg, #4a3a5e 0%, #36283f 100%); color: #fce0f0; padding: .55rem 1.25rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 0 #1f1428, 0 4px 10px rgba(0,0,0,.35); position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #1f1428; }
-		header h1 { margin: 0; font-size: 13pt; font-weight: 700; letter-spacing: .5px; color: #ffd1ee; text-shadow: 0 1px 0 #1f1428; }
-		header h1 .pink { color: #ff8fcb; }
-		header .right { display: flex; gap: .5rem; align-items: center; font-size: 10pt; }
-		header .who { opacity: .95; font-size: 9.5pt; padding: .25rem .55rem; background: rgba(0,0,0,.25); border-radius: 3px; border: 1px solid rgba(255,255,255,.1); color: #fce0f0; }
-		header button { background: linear-gradient(180deg, #6b5478 0%, #4a3a5e 100%); color: #fce0f0; border: 1px solid #1f1428; padding: .3rem .8rem; border-radius: 3px; cursor: pointer; font-size: 9.5pt; font-weight: 700; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 1px 0 #1f1428; }
-		header button:hover { background: linear-gradient(180deg, #7c6489 0%, #5a4a6e 100%); }
-		header button:active { background: linear-gradient(180deg, #4a3a5e 0%, #6b5478 100%); box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
-		nav { background: linear-gradient(180deg, #d8cfe5 0%, #b8a8c8 100%); padding: 0 1.25rem; display: flex; gap: 0; border-bottom: 2px solid #1f1428; box-shadow: 0 2px 4px rgba(0,0,0,.2); position: sticky; top: 41px; z-index: 49; }
-		nav a { padding: .5rem .95rem; color: #2a1a3a; text-decoration: none; border-bottom: 3px solid transparent; font-size: 10pt; font-weight: 700; transition: background .12s; display: flex; align-items: center; }
-		nav a:hover { background: rgba(255,255,255,.35); color: #ff5cb6; }
-		nav a.active { color: #b8246b; border-bottom-color: #ff5cb6; background: rgba(255,255,255,.55); }
-		main { max-width: 1180px; margin: 1.25rem auto; padding: 0 1.25rem 5rem 1.25rem; }
-		.card { background: #f7f3fa; border: 1px solid #1f1428; border-radius: 4px; padding: 1.1rem 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,.25), inset 0 1px 0 #fff; margin-bottom: 1rem; }
-		.card h2 { margin: 0 0 .85rem 0; font-size: 12pt; color: #2a1a3a; font-weight: 700; padding-bottom: .4rem; border-bottom: 1px solid #d8cfe5; }
-		.card.compact { padding: .85rem 1.1rem; }
-		.hero { background: linear-gradient(180deg, #fff8fc 0%, #f0e0f5 100%); border-color: #b8a8c8; }
-		.hero h2 { font-size: 14pt; margin-bottom: .5rem; color: #2a1a3a; border-bottom: none; }
-		.hero p { margin: 0 0 1.1rem 0; color: #4a3a5e; font-size: 10pt; line-height: 1.55; }
-		.banner { padding: .7rem .95rem; border-radius: 3px; margin-bottom: .9rem; font-size: 10pt; line-height: 1.5; border: 1px solid; }
-		.banner.success { background: #e0f5d8; color: #1a4a1a; border-color: #98c098; }
-		.banner.error { background: #f8d8d8; color: #800; border-color: #d09898; }
-		.banner.info { background: #d8e8f8; color: #1f3a73; border-color: #98b0d0; }
-		button { font-family: inherit; }
-		button.primary { background: linear-gradient(180deg, #ff9ed4 0%, #e85aa8 100%); color: white; border: 1px solid #a8246b; padding: .5rem 1.1rem; border-radius: 3px; cursor: pointer; font-size: 10pt; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 1px 0 #a8246b; text-shadow: 0 -1px 0 rgba(0,0,0,.15); font-family: inherit; }
-		button.primary:hover { background: linear-gradient(180deg, #ffaad9 0%, #f06ab2 100%); }
-		button.primary:active { background: linear-gradient(180deg, #e85aa8 0%, #ff9ed4 100%); box-shadow: inset 0 2px 3px rgba(0,0,0,.25); }
-		button.primary:disabled { background: #c8b8d0; border-color: #8a7a9a; cursor: not-allowed; box-shadow: none; color: #f0e8f0; text-shadow: none; }
-		button.primary.huge { font-size: 11pt; padding: .75rem 1.5rem; }
-		button.secondary { background: linear-gradient(180deg, #fafafa 0%, #d8cfe5 100%); color: #2a1a3a; border: 1px solid #8a7a9a; padding: .4rem .9rem; border-radius: 3px; cursor: pointer; font-size: 9.5pt; font-weight: 700; box-shadow: inset 0 1px 0 #fff, 0 1px 0 #8a7a9a; font-family: inherit; }
-		button.secondary:hover { background: linear-gradient(180deg, #ffffff 0%, #e8dff0 100%); border-color: #6a3aa6; color: #6a3aa6; }
-		button.secondary:active { background: linear-gradient(180deg, #d8cfe5 0%, #fafafa 100%); box-shadow: inset 0 2px 3px rgba(0,0,0,.15); }
-		button.danger { background: linear-gradient(180deg, #fafafa 0%, #f0d8d8 100%); color: #a02020; border: 1px solid #c08080; padding: .35rem .8rem; border-radius: 3px; cursor: pointer; font-size: 9pt; font-weight: 700; box-shadow: inset 0 1px 0 #fff, 0 1px 0 #c08080; font-family: inherit; }
-		button.danger:hover { background: linear-gradient(180deg, #fff 0%, #f8e0e0 100%); border-color: #a02020; }
-		button.ghost { background: transparent; color: #6a3aa6; border: 1px solid transparent; padding: .35rem .75rem; cursor: pointer; font-size: 9.5pt; font-weight: 700; font-family: inherit; border-radius: 3px; }
-		button.ghost:hover { background: rgba(106, 58, 166, .1); border-color: #6a3aa6; }
-		input, select, textarea { font-family: Verdana, Helvetica, Arial, sans-serif; font-size: 10pt; padding: .4rem .55rem; border: 1px solid #8a7a9a; border-radius: 3px; width: 100%; background: #fff; box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
-		input:focus, select:focus, textarea:focus { outline: none; border-color: #6a3aa6; box-shadow: inset 0 1px 2px rgba(0,0,0,.08), 0 0 0 2px rgba(255, 92, 182, .25); }
-		input[type=number] { -moz-appearance: textfield; }
-		.field { margin-bottom: .9rem; }
-		.field label { display: flex; align-items: center; gap: .35rem; font-size: 9.5pt; font-weight: 700; color: #2a1a3a; margin-bottom: .3rem; }
-		.field .hint { font-size: 9pt; color: #6a5a7a; margin-top: .25rem; font-style: italic; }
-		.field-error { color: #a02020; font-size: 9pt; margin-top: .2rem; font-weight: 700; }
-		.help { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: #b8a8c8; color: #2a1a3a; font-size: 10px; cursor: help; font-weight: 700; }
-		.help[title]:hover { background: #ff5cb6; color: white; }
-		.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
-		.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .9rem; }
-		.mon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .85rem; }
-		.mon-card { background: #fff; border: 1px solid #8a7a9a; border-radius: 4px; padding: .85rem; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.15), inset 0 1px 0 #fff; transition: transform .1s, box-shadow .12s; }
-		.mon-card:hover { transform: translateY(-2px); border-color: #ff5cb6; box-shadow: 0 3px 8px rgba(0,0,0,.2); }
-		.mon-card .sprite-box { width: 96px; height: 96px; margin: 0 auto .4rem auto; border-radius: 3px; background: #f0e8f5; display: flex; align-items: center; justify-content: center; image-rendering: pixelated; overflow: hidden; border: 1px solid #d8cfe5; }
+		html { color-scheme: dark; }
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+			font-size: 14px;
+			line-height: 1.5;
+			background: var(--bg);
+			color: var(--text);
+			min-height: 100vh;
+			-webkit-font-smoothing: antialiased;
+		}
+		::selection { background: rgba(242, 95, 166, .35); }
+		h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
+		a { color: var(--pink-strong); text-decoration: none; }
+		a:hover { text-decoration: underline; }
+		code { background: var(--panel-3); padding: .1rem .4rem; border-radius: 5px; font-size: .85em; color: var(--pink-strong); font-family: "SF Mono", ui-monospace, Consolas, monospace; }
+		hr { border: none; border-top: 1px solid var(--border); margin: 1.1rem 0; }
+
+		/* ── Scrollbars ─────────────────────────────────────────────── */
+		* { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+		*::-webkit-scrollbar { width: 9px; height: 9px; }
+		*::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 5px; }
+		*::-webkit-scrollbar-track { background: transparent; }
+
+		/* ── App shell ──────────────────────────────────────────────── */
+		.app { display: flex; min-height: 100vh; }
+		.sidebar {
+			position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w);
+			background: var(--panel);
+			border-right: 1px solid var(--border);
+			display: flex; flex-direction: column;
+			z-index: 40;
+		}
+		.brand { display: flex; align-items: center; gap: .6rem; padding: 1.05rem 1.15rem .9rem; }
+		.brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--pink), #b04ddb); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 14px; flex: none; }
+		.brand .name { font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+		.brand .name span { color: var(--pink-strong); }
+		.brand .sub { font-size: 10.5px; color: var(--faint); margin-top: -2px; }
+		.nav { padding: .35rem .6rem; display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+		.nav-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); padding: .85rem .55rem .3rem; }
+		.nav a {
+			display: flex; align-items: center; gap: .6rem;
+			padding: .45rem .55rem; border-radius: var(--radius-sm);
+			color: var(--dim); font-weight: 500; font-size: 13.5px;
+			text-decoration: none; transition: background .1s, color .1s;
+		}
+		.nav a:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+		.nav a.active { background: var(--pink-soft); color: var(--pink-strong); font-weight: 600; }
+		.nav a .ic { opacity: .85; }
+		.nav a .count { margin-left: auto; font-size: 11px; color: var(--faint); background: var(--panel-3); padding: 0 .45rem; border-radius: 8px; line-height: 1.5; }
+		.nav a.active .count { background: rgba(242, 95, 166, .22); color: var(--pink-strong); }
+
+		.side-foot { border-top: 1px solid var(--border); padding: .8rem; display: flex; flex-direction: column; gap: .6rem; }
+		.deploy-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .65rem .7rem; }
+		.deploy-box .row1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: .45rem; }
+		.deploy-box .mode { font-size: 10.5px; color: var(--faint); }
+		.deploy-status { display: inline-flex; align-items: center; gap: .35rem; font-size: 11.5px; font-weight: 600; }
+		.deploy-status .led { width: 7px; height: 7px; border-radius: 50%; }
+		.deploy-status.live { color: var(--green); } .deploy-status.live .led { background: var(--green); }
+		.deploy-status.pending { color: var(--amber); } .deploy-status.pending .led { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+		.deploy-box .btn { width: 100%; justify-content: center; }
+		.who-row { display: flex; align-items: center; gap: .5rem; padding: 0 .2rem; }
+		.who-row .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--border-2); display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; color: var(--pink-strong); flex: none; }
+		.who-row .wname { font-size: 12.5px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.who-row .signout { background: none; border: none; color: var(--faint); cursor: pointer; padding: .25rem; border-radius: 6px; display: flex; }
+		.who-row .signout:hover { color: var(--red); background: var(--red-soft); }
+
+		.main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; padding: 1.6rem 2.1rem 4rem; max-width: calc(var(--sidebar-w) + 1240px); }
+		.page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.15rem; flex-wrap: wrap; }
+		.page-head h1 { margin: 0; font-size: 20px; }
+		.page-head .sub { color: var(--dim); font-size: 13px; margin-top: .1rem; }
+		.page-head .actions { display: flex; gap: .5rem; align-items: center; }
+
+		/* ── Buttons ────────────────────────────────────────────────── */
+		.btn {
+			display: inline-flex; align-items: center; gap: .42rem;
+			font: inherit; font-size: 13px; font-weight: 600;
+			padding: .42rem .85rem; border-radius: var(--radius-sm);
+			border: 1px solid transparent; cursor: pointer;
+			background: var(--panel-3); color: var(--text);
+			transition: background .1s, border-color .1s, color .1s;
+			white-space: nowrap;
+		}
+		.btn:hover { background: var(--border-2); }
+		.btn:disabled { opacity: .45; cursor: not-allowed; }
+		.btn-primary { background: var(--pink); color: #fff; }
+		.btn-primary:hover { background: var(--pink-strong); }
+		.btn-quiet { background: transparent; border-color: var(--border-2); color: var(--dim); }
+		.btn-quiet:hover { background: var(--panel-3); color: var(--text); }
+		.btn-ghost { background: transparent; color: var(--dim); }
+		.btn-ghost:hover { background: var(--panel-3); color: var(--text); }
+		.btn-danger { background: transparent; border-color: transparent; color: var(--red); }
+		.btn-danger:hover { background: var(--red-soft); }
+		.btn-lg { font-size: 14px; padding: .55rem 1.15rem; }
+		.btn-sm { font-size: 12px; padding: .25rem .6rem; }
+		.btn-icon { padding: .4rem; }
+
+		/* ── Inputs ─────────────────────────────────────────────────── */
+		input, select, textarea {
+			font: inherit; font-size: 13.5px; color: var(--text);
+			background: var(--panel-2); border: 1px solid var(--border-2);
+			border-radius: var(--radius-sm); padding: .45rem .6rem; width: 100%;
+		}
+		input::placeholder, textarea::placeholder { color: var(--faint); }
+		input:focus, select:focus, textarea:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px rgba(242, 95, 166, .18); }
+		input[type=checkbox], input[type=radio] { width: auto; accent-color: var(--pink); }
+		input[type=range] { accent-color: var(--pink); padding: 0; background: transparent; border: none; box-shadow: none; }
+		input[type=range]:focus { box-shadow: none; }
+		input[type=file] { background: transparent; border: 1px dashed var(--border-2); padding: .6rem; color: var(--dim); }
+		select { appearance: none; background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2399a1b6' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right .6rem center; padding-right: 1.7rem; }
+		textarea { resize: vertical; min-height: 60px; }
+		.field { margin-bottom: .9rem; min-width: 0; }
+		.field label { display: flex; align-items: center; gap: .35rem; font-size: 12px; font-weight: 600; color: var(--dim); margin-bottom: .3rem; text-transform: uppercase; letter-spacing: .04em; }
+		.field .hint { font-size: 12px; color: var(--faint); margin-top: .3rem; }
+		.field-error { color: var(--red); font-size: 12.5px; margin-top: .25rem; font-weight: 500; }
+		.field.is-invalid input, .field.is-invalid select, .field.is-invalid textarea { border-color: var(--red); }
+		.help { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--panel-3); color: var(--dim); font-size: 10px; cursor: help; font-weight: 700; }
+		.help[title]:hover { background: var(--pink); color: #fff; }
+		.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+		.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 1rem; }
+
+		/* ── Cards / banners / chips ────────────────────────────────── */
+		.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem 1.25rem; margin-bottom: 1rem; }
+		.card h2 { margin: 0 0 .85rem; font-size: 15px; }
+		.card.compact { padding: .9rem 1.1rem; }
+		.banner { padding: .65rem .9rem; border-radius: var(--radius-sm); margin-bottom: .85rem; font-size: 13px; line-height: 1.5; border: 1px solid; }
+		.banner.success { background: var(--green-soft); color: var(--green); border-color: rgba(74, 222, 128, .3); }
+		.banner.error { background: var(--red-soft); color: var(--red); border-color: rgba(248, 113, 113, .3); }
+		.banner.info { background: rgba(122, 167, 255, .1); color: var(--blue); border-color: rgba(122, 167, 255, .3); }
+		.type-chip { display: inline-block; padding: .1rem .5rem; border-radius: 5px; font-size: 10px; color: #fff; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-shadow: 0 1px 1px rgba(0, 0, 0, .4); }
+		.pill { display: inline-flex; align-items: center; gap: .3rem; padding: .12rem .55rem; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border-2); color: var(--dim); }
+		.pill.ok { color: var(--green); border-color: rgba(74, 222, 128, .35); background: var(--green-soft); }
+		.pill.warn { color: var(--amber); border-color: rgba(251, 191, 36, .35); background: var(--amber-soft); }
+		.pill.accent { color: var(--pink-strong); border-color: rgba(242, 95, 166, .4); background: var(--pink-soft); }
+		.empty { text-align: center; color: var(--faint); padding: 2.4rem 1rem; font-size: 13.5px; }
+		.empty .big { margin-bottom: .6rem; opacity: .55; display: flex; justify-content: center; }
+
+		/* ── Toolbar / lists ────────────────────────────────────────── */
+		.list-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+		.list-toolbar input[type=text] { max-width: 280px; }
+		.list-toolbar select { width: auto; }
+		.list-toolbar .grow { flex: 1; min-width: 160px; }
+		.search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 320px; }
+		.search-wrap .ic { position: absolute; left: .6rem; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; display: flex; }
+		.search-wrap input { padding-left: 2rem; max-width: none; }
+		.row-list { display: flex; flex-direction: column; gap: .45rem; }
+		.row {
+			display: flex; align-items: center; gap: .85rem;
+			padding: .65rem .9rem; background: var(--panel);
+			border: 1px solid var(--border); border-radius: var(--radius-sm);
+			cursor: pointer; transition: border-color .1s, background .1s;
+		}
+		.row:hover { border-color: var(--border-2); background: var(--panel-2); }
+		.row .rname { font-weight: 600; font-size: 13.5px; }
+		.row .rmeta { color: var(--dim); font-size: 12.5px; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+		.row .rbody { flex: 1; min-width: 0; }
+		.row-actions { display: flex; gap: .15rem; align-items: center; opacity: 0; transition: opacity .12s; }
+		.row:hover .row-actions { opacity: 1; }
+
+		/* ── Pokémon grid ───────────────────────────────────────────── */
+		.mon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .8rem; }
+		.mon-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem .85rem .8rem; cursor: pointer; transition: border-color .12s, transform .12s; text-align: center; position: relative; }
+		.mon-card:hover { border-color: var(--pink); transform: translateY(-2px); }
+		.mon-card .sprite-box { width: 96px; height: 96px; margin: 0 auto .5rem; border-radius: var(--radius-sm); background: var(--panel-2); display: flex; align-items: center; justify-content: center; image-rendering: pixelated; overflow: hidden; }
 		.mon-card .sprite-box img { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
-		.mon-card .name { text-align: center; font-weight: 700; font-size: 10.5pt; color: #2a1a3a; margin-bottom: .25rem; }
+		.mon-card .name { font-weight: 600; font-size: 14px; margin-bottom: .3rem; }
 		.mon-card .types { display: flex; justify-content: center; gap: .25rem; margin-bottom: .4rem; }
-		.mon-card .meta { display: flex; justify-content: center; gap: 1rem; font-size: 9pt; color: #6a5a7a; }
-		.mon-card.new { display: flex; align-items: center; justify-content: center; min-height: 200px; border: 2px dashed #b8a8c8; color: #6a3aa6; font-weight: 700; background: rgba(255,255,255,.6); }
-		.mon-card.new:hover { background: #fff; border-style: solid; border-color: #ff5cb6; color: #ff5cb6; }
-		.type-chip { display: inline-block; padding: .15rem .5rem; border-radius: 2px; font-size: 8.5pt; color: white; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; text-shadow: 0 -1px 0 rgba(0,0,0,.3); border: 1px solid rgba(0,0,0,.2); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
-		.type-pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: .3rem; }
-		.type-pick button { padding: .45rem .25rem; border-radius: 3px; color: white; border: 2px solid rgba(0,0,0,.25); cursor: pointer; font-size: 9pt; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; opacity: .55; transition: opacity .1s; text-shadow: 0 -1px 0 rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); font-family: inherit; }
-		.type-pick button:hover { opacity: .85; }
-		.type-pick button.selected { opacity: 1; border-color: #fff; box-shadow: 0 0 0 2px #ff5cb6, 0 2px 4px rgba(0,0,0,.3); }
-		.type-pick button.selected-2 { opacity: 1; border-color: #fff; box-shadow: 0 0 0 2px #b58cff, 0 2px 4px rgba(0,0,0,.3); }
-		.stat-row { display: grid; grid-template-columns: 60px 1fr 60px; gap: .7rem; align-items: center; margin-bottom: .45rem; }
-		.stat-row .stat-name { font-weight: 700; font-size: 9.5pt; color: #2a1a3a; }
-		.stat-row .stat-bar { position: relative; height: 22px; background: #e0d5e8; border: 1px solid #8a7a9a; border-radius: 2px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.2); }
-		.stat-row .stat-bar input[type=range] { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: grab; z-index: 2; }
-		.stat-row .stat-bar .fill { position: absolute; left: 0; top: 0; bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.35); transition: width .1s; }
-		.stat-row .stat-bar .label { position: absolute; right: 6px; top: 0; bottom: 0; display: flex; align-items: center; font-size: 9pt; font-weight: 700; color: #2a1a3a; z-index: 1; pointer-events: none; text-shadow: 0 1px 0 rgba(255,255,255,.4); }
-		.stat-row .stat-num input { text-align: center; padding: .3rem; font-weight: 700; }
-		.bst-display { display: flex; justify-content: space-between; align-items: center; padding: .6rem .9rem; background: linear-gradient(180deg, #fff8fc, #f0e0f5); border: 1px solid #b8a8c8; border-radius: 3px; margin-top: .5rem; }
-		.bst-display .bst-num { font-size: 14pt; font-weight: 700; color: #b8246b; }
-		.bst-display .bst-tag { font-size: 9.5pt; color: #6a5a7a; }
-		.tabs { display: flex; gap: .15rem; border-bottom: 2px solid #8a7a9a; margin-bottom: 1.1rem; padding-bottom: 0; }
-		.tabs button { background: linear-gradient(180deg, #e8dff0 0%, #c8bcd5 100%); border: 1px solid #8a7a9a; border-bottom: none; padding: .5rem .9rem; cursor: pointer; font-size: 9.5pt; font-weight: 700; color: #4a3a5e; border-radius: 3px 3px 0 0; transition: background .1s; font-family: inherit; margin-bottom: -1px; }
-		.tabs button:hover { background: linear-gradient(180deg, #f0e8f5 0%, #d8cfe5 100%); color: #6a3aa6; }
-		.tabs button.active { background: #f7f3fa; color: #b8246b; border-bottom: 2px solid #f7f3fa; padding-bottom: calc(.5rem + 1px); }
-		.modal-overlay { position: fixed; inset: 0; background: rgba(20, 12, 30, .65); display: flex; align-items: center; justify-content: center; z-index: 100; }
-		.modal { background: #f7f3fa; border: 1px solid #1f1428; border-radius: 4px; min-width: 600px; max-width: 760px; width: 90vw; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
-		.modal-head { padding: .85rem 1.25rem; border-bottom: 1px solid #b8a8c8; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(180deg, #d8cfe5 0%, #b8a8c8 100%); border-radius: 3px 3px 0 0; }
-		.modal-head h2 { margin: 0; font-size: 12pt; color: #2a1a3a; border-bottom: none; padding: 0; }
-		.modal-head .x { background: transparent; border: none; cursor: pointer; color: #2a1a3a; font-size: 14pt; padding: 0 .4rem; font-weight: 700; }
-		.modal-head .x:hover { color: #b8246b; }
-		.modal-body { padding: 1.1rem 1.25rem; overflow-y: auto; flex: 1; }
-		.modal-foot { padding: .8rem 1.25rem; border-top: 1px solid #b8a8c8; display: flex; justify-content: space-between; align-items: center; gap: .65rem; background: #e8dff0; border-radius: 0 0 3px 3px; }
-		.fab { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 90; }
-		.fab button { padding: .7rem 1.3rem; border-radius: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.4); font-size: 10.5pt; }
-		.empty { text-align: center; color: #6a5a7a; padding: 2.5rem 1rem; font-size: 10.5pt; }
-		.empty .big { font-size: 2.5rem; margin-bottom: .85rem; opacity: .4; }
-		.sprite-uploader { background: #f0e8f5; border: 1px solid #b8a8c8; border-radius: 3px; padding: .85rem; }
-		.sprite-uploader .preview { display: flex; align-items: center; gap: .85rem; margin-bottom: .65rem; }
-		.sprite-uploader .preview-box { width: 96px; height: 96px; border-radius: 3px; background: #fff; border: 1px solid #8a7a9a; display: flex; align-items: center; justify-content: center; image-rendering: pixelated; overflow: hidden; }
+		.mon-card .meta { display: flex; justify-content: center; gap: .9rem; font-size: 12px; color: var(--dim); }
+		.mon-card .quick { position: absolute; top: .5rem; right: .5rem; display: flex; gap: .1rem; opacity: 0; transition: opacity .12s; }
+		.mon-card:hover .quick { opacity: 1; }
+		.mon-card .nosprite-flag { position: absolute; top: .55rem; left: .55rem; }
+		.mon-card.new { display: flex; align-items: center; justify-content: center; min-height: 208px; border-style: dashed; border-color: var(--border-2); color: var(--dim); font-weight: 600; background: transparent; gap: .4rem; }
+		.mon-card.new:hover { border-color: var(--pink); color: var(--pink-strong); transform: none; }
+
+		/* ── Dashboard ──────────────────────────────────────────────── */
+		.stat-row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .7rem; margin-bottom: 1rem; }
+		.stat-tile { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; cursor: pointer; transition: border-color .12s; }
+		.stat-tile:hover { border-color: var(--pink); }
+		.stat-tile .stat-val { font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+		.stat-tile .stat-label { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: .4rem; margin-top: .15rem; }
+		.dash-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1rem; align-items: start; }
+		.dash-cols > * { min-width: 0; }
+		@media (max-width: 1000px) { .dash-cols { grid-template-columns: 1fr; } }
+		.activity-row { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+		.activity-row:last-child { border-bottom: none; }
+		.act-icon { color: var(--faint); display: flex; flex: none; }
+		.act-body { flex: 1; color: var(--dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.act-who { font-weight: 600; color: var(--text); }
+		.act-id { color: var(--pink-strong); font-weight: 500; }
+		.act-ts { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+		.cmd-inline { background: #07080c; color: var(--pink-strong); padding: .2rem .6rem; border-radius: 6px; font-size: 12px; cursor: pointer; user-select: all; white-space: normal; overflow-wrap: anywhere; font-family: "SF Mono", ui-monospace, Consolas, monospace; border: 1px solid var(--border); }
+		.cmd-inline:hover { border-color: var(--border-2); }
+
+		/* ── Drawer (slide-over editor for moves/abilities/items) ───── */
+		.modal-overlay { position: fixed; inset: 0; background: rgba(5, 6, 10, .62); z-index: 100; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); }
+		.modal { background: var(--panel); border-left: 1px solid var(--border-2); width: 620px; max-width: 96vw; height: 100%; display: flex; flex-direction: column; box-shadow: var(--shadow); animation: drawerIn .18s ease-out; }
+		@keyframes drawerIn { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+		.modal-head { padding: .9rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex: none; }
+		.modal-head h2 { margin: 0; font-size: 15px; }
+		.modal-head .x { background: transparent; border: none; cursor: pointer; color: var(--dim); padding: .3rem; border-radius: 6px; display: flex; }
+		.modal-head .x:hover { color: var(--text); background: var(--panel-3); }
+		.modal-body { padding: 1.15rem 1.25rem; overflow-y: auto; flex: 1; }
+		.modal-foot { padding: .8rem 1.25rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: .65rem; flex: none; }
+		.modal-foot .note { font-size: 12px; color: var(--faint); }
+
+		/* ── Full-page editor (species & formats) ───────────────────── */
+		.editor-head { display: flex; align-items: center; gap: .85rem; margin-bottom: 1.25rem; flex-wrap: wrap; position: sticky; top: 0; background: linear-gradient(var(--bg) 82%, transparent); padding: .85rem 0 .9rem; z-index: 30; }
+		.editor-head .back { display: flex; align-items: center; gap: .3rem; }
+		.editor-head h1 { margin: 0; font-size: 18px; flex: 1; min-width: 200px; }
+		.editor-head h1 .muted { color: var(--faint); font-weight: 500; }
+		.editor-layout { display: grid; grid-template-columns: 168px 1fr; gap: 1.5rem; align-items: start; }
+		@media (max-width: 900px) { .editor-layout { grid-template-columns: 1fr; } .editor-toc { display: none; } }
+		.editor-toc { position: sticky; top: 4.4rem; display: flex; flex-direction: column; gap: 2px; }
+		.editor-toc a { padding: .35rem .6rem; border-radius: var(--radius-sm); color: var(--dim); font-size: 13px; font-weight: 500; }
+		.editor-toc a:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+		.editor-toc a.active { background: var(--pink-soft); color: var(--pink-strong); font-weight: 600; }
+		.editor-sections { min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+		.esec { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.15rem 1.3rem; scroll-margin-top: 4.6rem; }
+		.esec > h2 { margin: 0 0 .35rem; font-size: 15px; display: flex; align-items: center; gap: .5rem; }
+		.esec > .sub { color: var(--faint); font-size: 12.5px; margin: 0 0 .9rem; }
+
+		/* ── Type picker / stats (species editor) ───────────────────── */
+		.type-pick { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; }
+		.type-pick button { padding: .4rem .2rem; border-radius: 6px; color: #fff; border: 1px solid transparent; cursor: pointer; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .38; transition: opacity .1s, box-shadow .1s; text-shadow: 0 1px 1px rgba(0, 0, 0, .4); font-family: inherit; filter: saturate(.85); }
+		.type-pick button:hover { opacity: .75; }
+		.type-pick button.selected, .type-pick button.selected-2 { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--pink); }
+		.type-pick button.selected-2 { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--blue); }
+		.stat-row { display: grid; grid-template-columns: 46px 1fr 64px; gap: .7rem; align-items: center; margin-bottom: .45rem; }
+		.stat-row .stat-name { font-weight: 600; font-size: 12.5px; color: var(--dim); }
+		.stat-row .stat-bar { position: relative; height: 22px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+		.stat-row .stat-bar input[type=range] { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: grab; z-index: 2; margin: 0; }
+		.stat-row .stat-bar .fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width .08s; opacity: .9; }
+		.stat-row .stat-bar .label { position: absolute; right: 8px; top: 0; bottom: 0; display: flex; align-items: center; font-size: 11.5px; font-weight: 700; z-index: 1; pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+		.stat-row .stat-num input { text-align: center; padding: .3rem; font-weight: 600; }
+		.bst-display { display: flex; justify-content: space-between; align-items: center; padding: .6rem .9rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: .6rem; }
+		.bst-display .bst-num { font-size: 20px; font-weight: 700; color: var(--pink-strong); }
+		.bst-display .bst-tag { font-size: 12.5px; color: var(--dim); }
+
+		/* ── Sprite uploader ────────────────────────────────────────── */
+		.sprite-uploader { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .9rem; }
+		.sprite-uploader .preview { display: flex; align-items: center; gap: .9rem; margin-bottom: .7rem; }
+		.sprite-uploader .preview-box { width: 96px; height: 96px; border-radius: var(--radius-sm); background: var(--panel); border: 1px solid var(--border-2); display: flex; align-items: center; justify-content: center; image-rendering: pixelated; overflow: hidden; flex: none; }
 		.sprite-uploader .preview-box img { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
-		.sprite-uploader .preview-info { flex: 1; font-size: 9.5pt; color: #4a3a5e; line-height: 1.45; }
-		.audit-timeline { padding: .15rem 0; }
-		.audit-entry { display: flex; gap: .85rem; padding: .7rem 0; border-bottom: 1px solid #d8cfe5; }
-		.audit-entry:last-child { border-bottom: none; }
-		.audit-entry .icon { width: 32px; height: 32px; border-radius: 3px; background: #e8dff0; border: 1px solid #b8a8c8; display: flex; align-items: center; justify-content: center; font-size: 10pt; flex-shrink: 0; font-weight: 700; color: #6a3aa6; }
-		.audit-entry .body { flex: 1; }
-		.audit-entry .body .top { display: flex; justify-content: space-between; align-items: baseline; }
-		.audit-entry .body .who { font-weight: 700; color: #2a1a3a; font-size: 10pt; }
-		.audit-entry .body .ts { font-size: 9pt; color: #8a7a9a; }
-		.audit-entry .body .what { color: #4a3a5e; font-size: 9.5pt; margin-top: .15rem; }
-		.audit-entry pre { font-size: 9pt; background: #fff; border: 1px solid #d8cfe5; padding: .45rem; border-radius: 2px; max-height: 6rem; overflow: auto; margin-top: .3rem; font-family: Consolas, "Courier New", monospace; }
-		code { background: #f0e8f5; padding: .1rem .3rem; border-radius: 2px; font-size: 9.5pt; color: #6a3aa6; font-family: Consolas, "Courier New", monospace; }
-		pre.commands { background: #2d1b3d; color: #ffd1ee; padding: .85rem; border-radius: 3px; font-size: 9.5pt; border: 1px solid #1f1428; font-family: Consolas, "Courier New", monospace; }
-		pre.cmd-block { background: #1f1428; color: #ffd1ee; padding: .65rem .85rem; border-radius: 3px; font-size: 9.5pt; border: 1px solid #1f1428; font-family: Consolas, "Courier New", monospace; white-space: pre; margin: 0; user-select: all; }
-		.deploy-pill { display: inline-flex; align-items: center; padding: .25rem .6rem; border-radius: 12px; font-size: 9pt; font-weight: 700; border: 1px solid; }
-		.deploy-pill.ok { background: #e0f5d8; color: #1a4a1a; border-color: #98c098; }
-		.deploy-pill.warn { background: #fff3cd; color: #7a5c00; border-color: #e0c878; }
-		.deploy-pill.pending { background: #ffe4f0; color: #8a1c5a; border-color: #ff8fcb; }
-		.deploy-pill.clean { background: #e0f5d8; color: #1a4a1a; border-color: #98c098; }
-		.list-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .85rem; }
-		.list-toolbar input[type=text], .list-toolbar select { padding: .35rem .55rem; font-size: 9.5pt; }
-		.list-toolbar .grow { flex: 1; min-width: 180px; }
-		.row-actions { display: flex; gap: .3rem; align-items: center; }
-		/* Format editor v2 — tour organizer */
-		.fmt-section { margin-bottom: 1.1rem; }
-		.fmt-section h3 { margin: 0 0 .4rem 0; font-size: 10.5pt; color: #2a1a3a; font-weight: 700; }
-		.fmt-section p.sub { margin: 0 0 .55rem 0; font-size: 9pt; color: #6a5a7a; }
-		.fmt-tile-grid { display: grid; gap: .55rem; }
-		.fmt-tile-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
-		.fmt-tile-grid.cols-3 { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-		.fmt-tile-grid.cols-4 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-		.fmt-tile { background: #fff; border: 2px solid #ece2f0; border-radius: 6px; padding: .65rem .75rem; cursor: pointer; transition: border-color .1s, background .1s; }
-		.fmt-tile:hover { border-color: #ff8fcb; background: #fff8fc; }
-		.fmt-tile.selected { border-color: #b8246b; background: #ffe4f0; }
-		.fmt-tile .ico { font-size: 1.3rem; margin-bottom: .25rem; }
-		.fmt-tile .title { font-weight: 700; color: #2a1a3a; font-size: 10pt; }
-		.fmt-tile .desc { font-size: 8.5pt; color: #6a5a7a; margin-top: .15rem; line-height: 1.35; }
-		.fmt-slider-row { display: grid; grid-template-columns: 1fr 64px; gap: .55rem; align-items: center; padding: .35rem 0; }
-		.fmt-slider-row .lbl { font-size: 9.5pt; font-weight: 700; color: #2a1a3a; }
-		.fmt-slider-row .val { font-weight: 700; color: #b8246b; text-align: right; font-size: 10pt; }
-		.fmt-slider { width: 100%; }
-		.fmt-toggle { display: flex; align-items: flex-start; gap: .55rem; padding: .55rem .75rem; background: #fafafa; border: 1px solid #e8dff0; border-radius: 4px; cursor: pointer; margin-bottom: .35rem; }
-		.fmt-toggle.on { background: #fff0f8; border-color: #ff8fcb; }
-		.fmt-toggle input { margin-top: 2px; width: auto; }
-		.fmt-toggle .t-title { font-weight: 700; color: #2a1a3a; font-size: 9.5pt; }
-		.fmt-toggle .t-desc { font-size: 8.5pt; color: #6a5a7a; line-height: 1.4; margin-top: .15rem; }
-		.fmt-pool-tabs { display: flex; gap: .15rem; margin-bottom: .65rem; border-bottom: 1px solid #d8cfe5; }
-		.fmt-pool-tabs button { background: transparent; border: none; padding: .45rem .85rem; font-size: 9.5pt; font-weight: 700; color: #6a5a7a; cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; }
-		.fmt-pool-tabs button.active { color: #b8246b; border-bottom-color: #b8246b; }
-		.fmt-pool-tabs button .badge { display: inline-block; margin-left: .35rem; background: #ffe4f0; color: #b8246b; font-size: 8pt; padding: 0 .35rem; border-radius: 8px; border: 1px solid #ff8fcb; }
-		.fmt-pool-pane { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
-		.fmt-pool-list { background: #fff; border: 1px solid #b8a8c8; border-radius: 4px; max-height: 360px; display: flex; flex-direction: column; }
-		.fmt-pool-list .head { padding: .5rem .7rem; background: linear-gradient(180deg, #e8dff0 0%, #d8cfe5 100%); border-bottom: 1px solid #b8a8c8; font-weight: 700; font-size: 9.5pt; color: #2a1a3a; display: flex; justify-content: space-between; align-items: center; }
-		.fmt-pool-list .filters { padding: .4rem .55rem; border-bottom: 1px solid #d8cfe5; display: grid; gap: .3rem; }
-		.fmt-pool-list .filters input, .fmt-pool-list .filters select { padding: .3rem .45rem; font-size: 9pt; }
-		.fmt-pool-list .items { padding: .35rem; overflow-y: auto; flex: 1; display: grid; gap: .2rem; }
-		.fmt-pool-item { display: flex; justify-content: space-between; align-items: center; padding: .3rem .55rem; background: #fafafa; border: 1px solid #ece2f0; border-radius: 3px; cursor: pointer; font-size: 9.5pt; }
-		.fmt-pool-item:hover { background: #fff0f8; border-color: #ff8fcb; }
-		.fmt-pool-item.banned { background: #f8d8d8; border-color: #d09898; opacity: .75; }
-		.fmt-pool-item.unbanned { background: #e0f5d8; border-color: #98c098; }
-		.fmt-pool-item .pi-name { font-weight: 700; color: #2a1a3a; flex: 1; }
-		.fmt-pool-item .pi-meta { font-size: 8.5pt; color: #6a5a7a; margin-left: .4rem; }
-		.fmt-pool-item .pi-tag { font-size: 8pt; padding: .05rem .35rem; border-radius: 2px; font-weight: 700; margin-left: .3rem; }
-		.fmt-pool-item .pi-tag.ban { background: #a02020; color: white; }
-		.fmt-pool-item .pi-tag.unban { background: #2a7a2a; color: white; }
-		.fmt-summary { background: linear-gradient(180deg, #fff8fc 0%, #f0e0f5 100%); border: 1px solid #b8a8c8; border-radius: 4px; padding: .9rem 1.1rem; font-size: 10pt; line-height: 1.6; }
-		.fmt-summary .name { font-weight: 700; font-size: 12pt; color: #2a1a3a; margin-bottom: .35rem; }
-		.fmt-summary ul { margin: .3rem 0 0 0; padding-left: 1.2rem; }
-		.fmt-summary li { margin-bottom: .15rem; color: #4a3a5e; }
-		.fmt-summary .empty { color: #888; font-style: italic; }
-		.fmt-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .55rem; margin-bottom: 1rem; }
-		.fmt-preset { background: #fff; border: 2px solid #e8dff0; border-radius: 6px; padding: .65rem .75rem; cursor: pointer; transition: all .1s; }
-		.fmt-preset:hover { border-color: #ff5cb6; background: #fff8fc; transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.08); }
-		.fmt-preset .ico { font-size: 1.4rem; }
-		.fmt-preset .title { font-weight: 700; color: #2a1a3a; font-size: 10pt; margin-top: .2rem; }
-		.fmt-preset .desc { font-size: 8.5pt; color: #6a5a7a; line-height: 1.4; margin-top: .2rem; }
-		/* Format editor v3 — Card-Stack workflow */
-		.fc-editor { display: flex; flex-direction: column; gap: .65rem; }
-		.fc-sticky { position: sticky; top: 0; background: linear-gradient(180deg, #fff8fc 0%, #f7f0fa 100%); border: 1px solid #b8a8c8; border-radius: 4px; padding: .65rem .9rem; display: flex; gap: 1rem; align-items: center; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,.04); flex-wrap: wrap; }
-		.fc-sticky-left { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: .2rem; }
-		.fc-sticky-label { font-size: 8.5pt; font-weight: 700; color: #6a5a7a; text-transform: uppercase; letter-spacing: .03em; }
-		.fc-name-input { padding: .35rem .55rem; font-size: 11pt; font-weight: 700; color: #2a1a3a; border: 1px solid #b8a8c8; border-radius: 3px; background: #fff; width: 100%; }
-		.fc-sticky-id { font-size: 8.5pt; color: #6a5a7a; }
-		.fc-sticky-id code { background: #f0e8f5; padding: .05rem .35rem; border-radius: 2px; color: #b8246b; font-family: monospace; }
-		.fc-preview-slot { flex-basis: 100%; }
-		.fc-pill { display: inline-flex; gap: .4rem; align-items: center; background: #fff; border: 1px solid #ece2f0; border-radius: 6px; padding: .35rem .7rem; font-size: 9.5pt; }
-		.fc-pill-sect { color: #888; font-size: 8pt; text-transform: uppercase; font-weight: 700; }
-		.fc-pill-sep { color: #b8a8c8; }
-		.fc-pill-name { color: #3a2a4a; font-weight: 700; }
-		.fc-pill-tag { font-size: 7.5pt; padding: .05rem .35rem; border-radius: 8px; background: #ffe4f0; color: #b8246b; font-weight: 700; border: 1px solid #ff8fcb; }
-		.fc-pill-hidden { background: #fce0e0; color: #a02020; border-color: #d09898; }
-		.fc-stack { display: flex; flex-direction: column; gap: .5rem; }
-		.fc-card { background: #fff; border: 1px solid #d8cfe5; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.02); }
-		.fc-card[data-collapsed="true"] .fc-body { display: none; }
-		.fc-title-row { display: flex; align-items: center; gap: .55rem; padding: .55rem .85rem; cursor: pointer; user-select: none; background: linear-gradient(180deg, #f7f0fa 0%, #ece2f0 100%); border-bottom: 1px solid #d8cfe5; border-radius: 4px 4px 0 0; }
-		.fc-card[data-collapsed="true"] .fc-title-row { border-bottom-color: transparent; border-radius: 4px; }
-		.fc-title-row:hover { background: linear-gradient(180deg, #fff0f8 0%, #ffe4f0 100%); }
-		.fc-chev { font-size: .85rem; color: #b8246b; width: 1rem; text-align: center; }
-		.fc-title { font-weight: 700; color: #2a1a3a; font-size: 10.5pt; flex: 0 0 auto; }
-		.fc-summary { font-size: 8.5pt; color: #6a5a7a; font-style: italic; flex: 1; text-align: right; padding-left: .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-		.fc-body { padding: .85rem 1rem; }
-		.fc-chip-row { display: flex; flex-wrap: wrap; gap: .25rem; }
-		.fc-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .5rem; border-radius: 10px; font-size: 8.5pt; font-weight: 700; }
-		.fc-chip-ban { background: #fce0e0; color: #a02020; border: 1px solid #d09898; }
-		.fc-chip-unban { background: #e0f5d8; color: #2a7a2a; border: 1px solid #98c098; }
-		.fc-chip-x { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 11pt; line-height: 1; padding: 0 0 0 .2rem; font-weight: 700; }
-		.fc-mon-filters { display: flex; gap: .45rem; align-items: center; margin-bottom: .55rem; flex-wrap: wrap; }
-		.fc-mon-filters input, .fc-mon-filters select { padding: .3rem .45rem; font-size: 9pt; }
-		.fc-mon-count { font-size: 8.5pt; color: #6a5a7a; margin-left: auto; }
-		.fc-mon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: .35rem; max-height: 460px; overflow-y: auto; padding: .35rem; background: #fafafa; border: 1px solid #ece2f0; border-radius: 3px; }
-		.fc-mon-grid-tight { max-height: none; padding: .25rem; background: transparent; border: none; gap: .25rem; }
-		.fc-search-results { margin-top: .55rem; max-height: 460px; overflow-y: auto; }
-		.fc-tier-head { font-size: 9pt; font-weight: 700; color: #b8246b; text-transform: uppercase; letter-spacing: .03em; padding: .45rem .25rem .15rem; border-top: 1px solid #ece2f0; margin-top: .15rem; }
-		.fc-tier-head:first-child { border-top: none; margin-top: 0; padding-top: .15rem; }
-		.fc-result-list { display: grid; gap: .2rem; padding: .25rem 0; }
-		.fc-mon-tile { background: #fff; border: 1.5px solid #ece2f0; border-radius: 4px; padding: .2rem .25rem; text-align: center; cursor: pointer; transition: all .1s; display: flex; flex-direction: column; align-items: center; gap: .1rem; }
-		.fc-mon-tile:hover { border-color: #ff5cb6; background: #fff8fc; transform: translateY(-1px); }
-		.fc-mon-tile.custom { border-color: #ff8fcb; }
-		.fc-mon-tile.banned { background: #fce0e0; border-color: #c08080; opacity: .7; }
-		.fc-mon-tile.unbanned { background: #e0f5d8; border-color: #6a9a4a; }
-		.fc-mon-tile.flash-banned { animation: fcFlash 800ms ease-out; }
-		@keyframes fcFlash { 0% { background: #ff5cb6; transform: scale(1.08); } 100% { background: inherit; transform: scale(1); } }
-		.fc-mon-sprite { width: 56px; height: 56px; object-fit: contain; image-rendering: pixelated; }
-		.fc-mon-name { font-size: 8pt; font-weight: 700; color: #2a1a3a; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-		.fc-json { background: #1f1428; color: #ffd0e8; padding: .65rem .85rem; border-radius: 3px; font-size: 8.5pt; max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; font-family: monospace; }
-		.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-		.login-card { background: #f7f3fa; border: 1px solid #1f1428; padding: 2rem; border-radius: 4px; box-shadow: 0 8px 30px rgba(0,0,0,.5); width: 100%; max-width: 380px; }
-		.login-card .logo { font-size: 2rem; text-align: center; margin-bottom: .25rem; color: #ff5cb6; font-weight: 700; }
-		.login-card h1 { margin: 0 0 .4rem 0; font-size: 14pt; color: #2a1a3a; text-align: center; }
-		.login-card p { margin: 0 0 1.25rem 0; color: #6a5a7a; text-align: center; font-size: 9.5pt; }
-		.toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: #f7f3fa; border: 1px solid #1f1428; border-radius: 3px; padding: .7rem 1.2rem; box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 200; max-width: 90vw; font-size: 10pt; }
-		.toast.success { border-left: 4px solid #28a745; }
-		.toast.error { border-left: 4px solid #c33; }
-		.toast.info { border-left: 4px solid #ff5cb6; }
-		@media (max-width: 720px) {
-			.modal { min-width: 0; }
-			.type-pick { grid-template-columns: repeat(3, 1fr); }
-			.grid-2, .grid-3 { grid-template-columns: 1fr; }
-		}
-		/* Format Workshop — drag-and-drop game-builder */
-		.wk-root { display: flex; flex-direction: column; gap: .85rem; }
-		.wk-intro { font-size: 9.5pt; color: #4a3a5e; background: #f0e8f5; border: 1px solid #b8a8c8; padding: .55rem .8rem; border-radius: 3px; line-height: 1.5; }
-		.wk-preset-row-wrap { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
-		.wk-preset-label { font-size: 9.5pt; font-weight: 700; color: #2a1a3a; }
-		.wk-presets { display: flex; flex-wrap: wrap; gap: .3rem; }
-		.wk-presets button { font-size: 9pt; padding: .25rem .6rem; }
-		.wk-grid { display: grid; grid-template-columns: 280px 1fr; gap: .9rem; min-height: 500px; }
-		.wk-library { background: #fff; border: 1px solid #8a7a9a; border-radius: 3px; display: flex; flex-direction: column; box-shadow: inset 0 1px 0 #fff; }
-		.wk-library-head { padding: .6rem .75rem; border-bottom: 1px solid #d8cfe5; background: linear-gradient(180deg, #e8dff0 0%, #d8cfe5 100%); border-radius: 3px 3px 0 0; }
-		.wk-library-title { font-weight: 700; font-size: 10pt; color: #2a1a3a; }
-		.wk-library-hint { font-size: 8.5pt; color: #6a5a7a; margin-top: .1rem; font-style: italic; }
-		.wk-library-filters { padding: .5rem .65rem; border-bottom: 1px solid #d8cfe5; display: grid; gap: .35rem; }
-		.wk-library-filters input, .wk-library-filters select { padding: .3rem .45rem; font-size: 9pt; }
-		.wk-library-list { padding: .4rem; overflow-y: auto; max-height: 480px; flex: 1; display: grid; grid-template-columns: 1fr; gap: .25rem; }
-		.wk-mon { background: linear-gradient(180deg, #fafafa 0%, #efe9f5 100%); border: 1px solid #b8a8c8; padding: .35rem .55rem; border-radius: 3px; cursor: grab; box-shadow: inset 0 1px 0 #fff; transition: background .1s, border-color .1s; }
-		.wk-mon:hover { background: linear-gradient(180deg, #fff 0%, #f0e0f5 100%); border-color: #ff5cb6; }
-		.wk-mon:active { cursor: grabbing; }
-		.wk-mon.custom { background: linear-gradient(180deg, #fff8fc 0%, #ffe0f0 100%); border-color: #ff8fcb; }
-		.wk-mon.banned { opacity: .55; background: linear-gradient(180deg, #f8d8d8 0%, #efb8b8 100%); border-color: #c08080; }
-		.wk-mon.unbanned { background: linear-gradient(180deg, #e0f5d8 0%, #b8e0a8 100%); border-color: #6a9a4a; opacity: 1; }
-		.wk-mon-name { font-weight: 700; font-size: 9.5pt; color: #2a1a3a; display: flex; align-items: center; gap: .3rem; }
-		.wk-custom-dot { color: #ff5cb6; font-size: 11pt; line-height: 1; }
-		.wk-mon-types { display: flex; gap: .2rem; margin-top: .15rem; flex-wrap: wrap; }
-		.wk-mon .type-chip { padding: .05rem .35rem; font-size: 8pt; }
-		.wk-state { font-size: 8pt; font-weight: 700; margin-top: .2rem; padding: .05rem .35rem; border-radius: 2px; display: inline-block; }
-		.wk-state.banned { background: #a02020; color: white; }
-		.wk-state.unbanned { background: #2a7a2a; color: white; }
-		.wk-zones { display: grid; grid-template-rows: auto auto auto; gap: .65rem; min-width: 0; }
-		.wk-zone { background: #fff; border: 1px solid #8a7a9a; border-radius: 3px; padding: .65rem .75rem; box-shadow: inset 0 1px 0 #fff; transition: border-color .12s, background .12s; }
-		.wk-zone.wk-drag-over { border-color: #ff5cb6; border-width: 2px; padding: calc(.65rem - 1px) calc(.75rem - 1px); background: #fff8fc; }
-		.wk-zone.wk-zone-allowed { background: linear-gradient(180deg, #fff 0%, #f0f8e8 100%); border-color: #6a9a4a; }
-		.wk-zone.wk-zone-banned { background: linear-gradient(180deg, #fff 0%, #fff0f0 100%); border-color: #c08080; }
-		.wk-zone.wk-zone-unban { background: linear-gradient(180deg, #fff 0%, #fcfae0 100%); border-color: #c0a040; }
-		.wk-zone-head { display: flex; align-items: baseline; gap: .65rem; margin-bottom: .4rem; flex-wrap: wrap; }
-		.wk-zone-title { font-weight: 700; font-size: 11pt; color: #2a1a3a; }
-		.wk-zone-sub { font-size: 9pt; color: #6a5a7a; font-style: italic; flex: 1; }
-		.wk-zone-count { font-size: 8.5pt; color: #6a3aa6; background: #f0e8f5; padding: .1rem .4rem; border-radius: 2px; border: 1px solid #b8a8c8; font-weight: 700; }
-		.wk-zone-list { display: flex; flex-wrap: wrap; gap: .25rem; min-height: 36px; padding: .4rem; background: #faf8fc; border: 1px dashed #b8a8c8; border-radius: 2px; margin-bottom: .4rem; }
-		.wk-zone-empty { color: #8a7a9a; font-size: 9pt; font-style: italic; padding: .3rem .5rem; }
-		.wk-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .2rem .15rem .2rem .55rem; background: linear-gradient(180deg, #e8dff0 0%, #c8bcd5 100%); color: #2a1a3a; border: 1px solid #8a7a9a; border-radius: 2px; font-size: 9pt; font-weight: 700; box-shadow: inset 0 1px 0 #fff; }
-		.wk-chip-static { padding: .2rem .55rem; }
-		.wk-chip-custom { background: linear-gradient(180deg, #ffe8f4 0%, #ff8fcb 100%); border-color: #b8246b; color: #fff; }
-		.wk-chip-x { background: transparent; border: none; color: #6a5a7a; font-size: 11pt; line-height: 1; padding: 0 .25rem; cursor: pointer; font-weight: 700; font-family: inherit; }
-		.wk-chip-x:hover { color: #a02020; }
-		.wk-zone input[type=text] { padding: .3rem .5rem; font-size: 9pt; }
-		.wk-allowed-list { background: #fff; }
-		@media (max-width: 980px) {
-			.wk-grid { grid-template-columns: 1fr; }
-			.wk-library-list { max-height: 240px; }
-		}
-		/* Learnset editor — two-column drag/drop */
-		.ls-root { display: flex; flex-direction: column; gap: .85rem; }
-		.ls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; min-height: 500px; }
-		.ls-pane { background: #fff; border: 1px solid #8a7a9a; border-radius: 3px; display: flex; flex-direction: column; box-shadow: inset 0 1px 0 #fff; }
-		.ls-pane-head { padding: .6rem .75rem; background: linear-gradient(180deg, #e8dff0 0%, #d8cfe5 100%); border-bottom: 1px solid #d8cfe5; border-radius: 3px 3px 0 0; }
-		.ls-pane-title { font-weight: 700; font-size: 10pt; color: #2a1a3a; }
-		.ls-pane-sub { font-size: 8.5pt; color: #6a5a7a; margin-top: .1rem; font-style: italic; }
-		.ls-pane-filters { padding: .5rem .65rem; border-bottom: 1px solid #d8cfe5; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: .35rem; }
-		.ls-pane-filters input, .ls-pane-filters select { padding: .3rem .45rem; font-size: 9pt; }
-		.ls-list { padding: .4rem; overflow-y: auto; max-height: 480px; flex: 1; display: grid; grid-template-columns: 1fr; gap: .3rem; }
-		.ls-zone { background: linear-gradient(180deg, #fff 0%, #f0f8e8 100%); border: 1px solid #6a9a4a; border-radius: 3px; display: flex; flex-direction: column; box-shadow: inset 0 1px 0 #fff; }
-		.ls-zone.wk-drag-over { border-width: 2px; }
-		.ls-zone-head { padding: .6rem .75rem; background: linear-gradient(180deg, #d8e8c8 0%, #b8d0a0 100%); border-bottom: 1px solid #6a9a4a; border-radius: 3px 3px 0 0; }
-		.ls-zone-title { font-weight: 700; font-size: 10pt; color: #2a4a1a; }
-		.ls-zone-sub { font-size: 8.5pt; color: #4a6a2a; margin-top: .1rem; font-style: italic; }
-		.ls-zone input[type=text] { margin: 0 .65rem .65rem .65rem; width: calc(100% - 1.3rem); padding: .35rem .55rem; font-size: 9pt; }
-		.ls-zone .ls-list { background: #fafff0; }
-		.ls-move { background: linear-gradient(180deg, #fafafa 0%, #efe9f5 100%); border: 1px solid #b8a8c8; padding: .35rem .55rem; border-radius: 3px; cursor: grab; box-shadow: inset 0 1px 0 #fff; display: grid; grid-template-columns: 1fr auto; gap: .25rem .5rem; align-items: center; }
-		.ls-move:hover:not(.ls-already) { border-color: #ff5cb6; background: linear-gradient(180deg, #fff 0%, #f0e0f5 100%); }
+		.sprite-uploader .preview-info { flex: 1; font-size: 12.5px; color: var(--dim); line-height: 1.5; }
+
+		/* ── Learnset two-pane (Moves section of species editor) ────── */
+		.ls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+		@media (max-width: 1100px) { .ls-grid { grid-template-columns: 1fr; } }
+		.ls-pane { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; min-width: 0; }
+		.ls-pane-head { padding: .6rem .8rem; border-bottom: 1px solid var(--border); }
+		.ls-pane-title { font-weight: 600; font-size: 13px; }
+		.ls-pane-sub { font-size: 11.5px; color: var(--faint); margin-top: .1rem; }
+		.ls-pane-filters { padding: .5rem .65rem; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 2fr 1fr 1fr; gap: .35rem; }
+		.ls-pane-filters input, .ls-pane-filters select { padding: .3rem .45rem; font-size: 12px; }
+		.ls-list { padding: .45rem; overflow-y: auto; max-height: 430px; flex: 1; display: grid; grid-template-columns: 1fr; gap: .3rem; align-content: start; }
+		.ls-zone { background: var(--panel-2); border: 1px solid rgba(74, 222, 128, .35); border-radius: var(--radius-sm); display: flex; flex-direction: column; min-width: 0; }
+		.ls-zone.wk-drag-over { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+		.ls-zone-head { padding: .6rem .8rem; border-bottom: 1px solid var(--border); }
+		.ls-zone-title { font-weight: 600; font-size: 13px; color: var(--green); }
+		.ls-zone-sub { font-size: 11.5px; color: var(--faint); margin-top: .1rem; }
+		.ls-zone input[type=text] { margin: 0 .65rem .65rem; width: calc(100% - 1.3rem); padding: .35rem .55rem; font-size: 12.5px; }
+		.ls-move { background: var(--panel); border: 1px solid var(--border); padding: .4rem .6rem; border-radius: 6px; cursor: grab; display: grid; grid-template-columns: 1fr auto; gap: .15rem .5rem; align-items: center; }
+		.ls-move:hover:not(.ls-already) { border-color: var(--pink); }
 		.ls-move:active { cursor: grabbing; }
-		.ls-move.ls-already { opacity: .55; background: linear-gradient(180deg, #e8efe0 0%, #d8e0c8 100%); cursor: default; }
-		.ls-move.ls-known { background: linear-gradient(180deg, #fff 0%, #e8f5d8 100%); border-color: #6a9a4a; cursor: default; }
-		.ls-move-name { font-weight: 700; font-size: 9.5pt; color: #2a1a3a; }
-		.ls-move-warn { color: #c08020; cursor: help; }
-		.ls-move-meta { grid-column: 1 / -1; display: flex; gap: .25rem; align-items: center; flex-wrap: wrap; font-size: 8.5pt; color: #4a3a5e; }
-		.ls-move-meta .type-chip { padding: .05rem .35rem; font-size: 8pt; }
-		.ls-cat { padding: .05rem .4rem; font-size: 8pt; border-radius: 2px; font-weight: 700; color: white; text-shadow: 0 -1px 0 rgba(0,0,0,.3); border: 1px solid rgba(0,0,0,.2); }
-		.ls-cat-physical { background: #b85020; }
-		.ls-cat-special { background: #4070b8; }
-		.ls-cat-status { background: #707070; }
-		.ls-bp { background: #f0e8f5; border: 1px solid #b8a8c8; padding: .05rem .35rem; border-radius: 2px; font-weight: 700; }
-		.ls-add-btn { background: linear-gradient(180deg, #d8e8c8 0%, #a0c878 100%); border: 1px solid #6a9a4a; color: #2a4a1a; padding: .15rem .5rem; font-size: 8.5pt; font-weight: 700; cursor: pointer; border-radius: 2px; font-family: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
-		.ls-add-btn:hover { background: linear-gradient(180deg, #e8f5d8 0%, #b8d888 100%); }
-		.ls-already-tag { font-size: 8.5pt; color: #6a9a4a; font-weight: 700; }
-		@media (max-width: 980px) { .ls-grid { grid-template-columns: 1fr; } }
-		.ls-header { background: linear-gradient(180deg, #fff8fc 0%, #f7f0fa 100%); border: 1px solid #b8a8c8; border-radius: 4px; padding: .65rem .85rem; display: flex; align-items: center; gap: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
-		.ls-header-label { font-size: 8.5pt; font-weight: 700; color: #6a5a7a; text-transform: uppercase; letter-spacing: .03em; margin-bottom: .25rem; }
-		.ls-header-row { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
-		.ls-header-row select { padding: .35rem .55rem; font-size: 10.5pt; font-weight: 700; min-width: 240px; }
-		.ls-mon-info { display: inline-flex; align-items: center; gap: .35rem; }
-		.ls-mon-info-name { font-weight: 700; color: #2a1a3a; font-size: 10pt; }
-		.ls-starting { /* container only */ }
-		.ls-starting-summary { background: #f0e8f5; border: 1px solid #b8a8c8; border-radius: 4px; padding: .55rem .85rem; font-size: 9.5pt; color: #2a1a3a; display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-		.ls-starting-pick { background: #fff8fc; border: 1.5px dashed #ff8fcb; border-radius: 6px; padding: .85rem 1rem; }
-		.ls-starting-title { font-size: 10pt; font-weight: 700; color: #2a1a3a; margin-bottom: .55rem; }
+		.ls-move.ls-already { opacity: .45; cursor: default; }
+		.ls-move.ls-known { border-color: rgba(74, 222, 128, .3); cursor: default; }
+		.ls-move-name { font-weight: 600; font-size: 12.5px; }
+		.ls-move-warn { color: var(--amber); cursor: help; }
+		.ls-move-meta { grid-column: 1 / -1; display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--dim); }
+		.ls-move-meta .type-chip { padding: .03rem .35rem; font-size: 9px; }
+		.ls-cat { padding: .03rem .4rem; font-size: 9.5px; border-radius: 4px; font-weight: 700; color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .4); }
+		.ls-cat-physical { background: #c2553b; }
+		.ls-cat-special { background: #4f76c4; }
+		.ls-cat-status { background: #5d6678; }
+		.ls-bp { background: var(--panel-3); padding: .03rem .4rem; border-radius: 4px; font-weight: 600; }
+		.ls-add-btn { background: var(--green-soft); border: 1px solid rgba(74, 222, 128, .35); color: var(--green); padding: .15rem .5rem; font-size: 11px; font-weight: 700; cursor: pointer; border-radius: 5px; font-family: inherit; }
+		.ls-add-btn:hover { background: rgba(74, 222, 128, .22); }
+		.ls-already-tag { font-size: 11px; color: var(--green); font-weight: 600; }
+		.wk-chip-x { background: transparent; border: none; color: var(--faint); font-size: 15px; line-height: 1; padding: 0 .25rem; cursor: pointer; font-weight: 700; font-family: inherit; }
+		.wk-chip-x:hover { color: var(--red); }
+		.ls-starting-pick { background: var(--panel-2); border: 1px dashed var(--border-2); border-radius: var(--radius-sm); padding: .85rem 1rem; }
+		.ls-starting-title { font-size: 13px; font-weight: 600; margin-bottom: .55rem; }
 		.ls-starting-tiles { display: grid; grid-template-columns: 1fr 2fr; gap: .65rem; }
 		@media (max-width: 700px) { .ls-starting-tiles { grid-template-columns: 1fr; } }
-		.ls-starting-tile { background: #fff; border: 2px solid #ece2f0; border-radius: 6px; padding: .75rem .85rem; cursor: pointer; text-align: left; font-family: inherit; transition: all .12s; display: flex; flex-direction: column; gap: .25rem; }
-		.ls-starting-tile:hover { border-color: #ff5cb6; background: #fff8fc; transform: translateY(-1px); }
+		.ls-starting-tile { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .75rem .85rem; cursor: pointer; text-align: left; font-family: inherit; transition: border-color .12s; display: flex; flex-direction: column; gap: .25rem; color: var(--text); }
+		.ls-starting-tile:hover { border-color: var(--pink); }
 		.ls-tile-inherit { cursor: default; }
-		.ls-tile-inherit:hover { transform: none; }
-		.ls-tile-icon { font-size: 1.5rem; }
-		.ls-tile-title { font-weight: 700; font-size: 10.5pt; color: #2a1a3a; }
-		.ls-tile-desc { font-size: 9pt; color: #6a5a7a; line-height: 1.4; }
-		.ls-tile-inherit input[type="text"] { width: 100%; padding: .35rem .55rem; font-size: 9.5pt; margin-top: .45rem; }
-		.ls-inherit-results { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; max-height: 180px; overflow-y: auto; padding: .15rem; }
-		.ls-inherit-pick { background: #fafafa; border: 1px solid #ece2f0; border-radius: 14px; padding: .2rem .6rem; font-size: 9pt; cursor: pointer; font-family: inherit; color: #2a1a3a; }
-		.ls-inherit-pick:hover { background: #ffe4f0; border-color: #ff5cb6; }
-		/* Home dashboard — stat tiles */
-		.stat-tile { background: #fff; border: 1px solid #8a7a9a; border-radius: 4px; padding: .65rem .85rem; cursor: pointer; text-align: center; transition: transform .1s, box-shadow .12s; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-		.stat-tile:hover { transform: translateY(-2px); border-color: #ff5cb6; box-shadow: 0 3px 8px rgba(0,0,0,.15); }
-		.stat-val { font-size: 1.8rem; font-weight: 700; color: #2a1a3a; line-height: 1.3; }
-		.stat-label { font-size: .85rem; color: #6a5a7a; margin-top: .15rem; }
-		/* Workflow steps */
-		.workflow-step { background: #fff; border: 1px solid #8a7a9a; border-radius: 4px; padding: .8rem; flex: 1; min-width: 180px; display: flex; gap: .65rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-		.ws-badge { font-size: 1rem; font-weight: 700; color: #ff5cb6; min-width: 22px; text-align: center; line-height: 1.5; }
-		.ws-body { flex: 1; }
-		.ws-title { font-weight: 700; font-size: .9rem; color: #2a1a3a; }
-		.ws-desc { font-size: .78rem; color: #6a5a7a; margin-top: .15rem; line-height: 1.4; }
-		/* Activity feed */
-		.activity-row { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid #e8dff0; font-size: .85rem; }
-		.activity-row:last-child { border-bottom: none; }
-		.act-icon { font-size: 1rem; min-width: 22px; text-align: center; }
-		.act-body { flex: 1; color: #4a3a5e; }
-		.act-who { font-weight: 700; color: #2a1a3a; }
-		.act-id { color: #7a5aaa; font-weight: 600; }
-		.act-ts { font-size: .75rem; color: #888; white-space: nowrap; }
-		/* Inline command pill */
-		.cmd-inline { background: #1f1428; color: #ffd1ee; padding: .15rem .55rem; border-radius: 3px; font-size: .75rem; cursor: pointer; user-select: all; white-space: nowrap; }
-		.cmd-inline:hover { background: #3a2a4a; }
-		/* Inline validation */
-		.field.is-invalid { border-left: 3px solid #c33; padding-left: calc(1.25rem - 3px); background: #fff8f8; }
-		.field.is-invalid input, .field.is-invalid select, .field.is-invalid textarea { border-color: #c33; }
-		.field-error { color: #a02020; font-size: 9pt; margin-top: .2rem; font-weight: 700; }
+		.ls-tile-title { font-weight: 600; font-size: 13.5px; }
+		.ls-tile-desc { font-size: 12px; color: var(--faint); line-height: 1.45; }
+		.ls-tile-inherit input[type="text"] { width: 100%; padding: .35rem .55rem; font-size: 12.5px; margin-top: .45rem; }
+		.ls-inherit-results { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; max-height: 170px; overflow-y: auto; padding: .15rem; }
+		.ls-inherit-pick { background: var(--panel-3); border: 1px solid var(--border-2); border-radius: 999px; padding: .15rem .6rem; font-size: 12px; cursor: pointer; font-family: inherit; color: var(--text); }
+		.ls-inherit-pick:hover { border-color: var(--pink); color: var(--pink-strong); }
+		.ls-starting-summary { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .55rem .85rem; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .85rem; }
+
+		/* ── Format editor ──────────────────────────────────────────── */
+		.fc-editor { display: flex; flex-direction: column; gap: .75rem; }
+		.fc-sticky { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: .8rem 1rem; display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap; }
+		.fc-sticky-left { flex: 1; min-width: 230px; display: flex; flex-direction: column; gap: .2rem; }
+		.fc-sticky-label { font-size: 11px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+		.fc-name-input { padding: .4rem .6rem; font-size: 15px; font-weight: 600; }
+		.fc-sticky-id { font-size: 11.5px; color: var(--faint); }
+		.fc-preview-slot { flex-basis: 100%; }
+		.fc-pill { display: inline-flex; gap: .45rem; align-items: center; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: .3rem .8rem; font-size: 12.5px; flex-wrap: wrap; }
+		.fc-pill-sect { color: var(--faint); font-size: 10.5px; text-transform: uppercase; font-weight: 600; letter-spacing: .04em; }
+		.fc-pill-sep { color: var(--faint); }
+		.fc-pill-name { font-weight: 600; }
+		.fc-pill-tag { font-size: 10px; padding: .05rem .45rem; border-radius: 999px; background: var(--pink-soft); color: var(--pink-strong); font-weight: 700; }
+		.fc-pill-hidden { background: var(--red-soft); color: var(--red); }
+		.fc-stack { display: flex; flex-direction: column; gap: .6rem; }
+		.fc-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+		.fc-card[data-collapsed="true"] .fc-body { display: none; }
+		.fc-title-row { display: flex; align-items: center; gap: .55rem; padding: .7rem 1rem; cursor: pointer; user-select: none; }
+		.fc-title-row:hover { background: var(--panel-2); }
+		.fc-chev { color: var(--faint); width: 1rem; display: flex; align-items: center; transition: transform .12s; }
+		.fc-card[data-collapsed="false"] .fc-chev { transform: rotate(90deg); }
+		.fc-title { font-weight: 600; font-size: 13.5px; flex: 0 0 auto; }
+		.fc-summary { font-size: 12px; color: var(--faint); flex: 1; text-align: right; padding-left: .5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.fc-body { padding: .35rem 1.1rem 1.1rem; border-top: 1px solid var(--border); }
+		.fmt-section { margin-top: .9rem; }
+		.fmt-section h3 { margin: 0 0 .35rem; font-size: 13px; }
+		.fmt-section p.sub, .sub { margin: 0 0 .55rem; font-size: 12px; color: var(--faint); }
+		.fmt-tile-grid { display: grid; gap: .5rem; }
+		.fmt-tile-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+		.fmt-tile-grid.cols-3 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+		.fmt-tile-grid.cols-4 { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+		.fmt-tile { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .6rem .7rem; cursor: pointer; transition: border-color .1s; }
+		.fmt-tile:hover { border-color: var(--border-2); }
+		.fmt-tile.selected { border-color: var(--pink); background: var(--pink-soft); }
+		.fmt-tile .ico { margin-bottom: .15rem; color: var(--dim); display: flex; }
+		.fmt-tile .title { font-weight: 600; font-size: 13px; }
+		.fmt-tile .desc { font-size: 11.5px; color: var(--faint); margin-top: .1rem; line-height: 1.4; }
+		.fmt-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: .5rem; margin-bottom: .5rem; }
+		.fmt-preset { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .6rem .7rem; cursor: pointer; transition: border-color .1s; }
+		.fmt-preset:hover { border-color: var(--pink); }
+		.fmt-preset .title { font-weight: 600; font-size: 13px; }
+		.fmt-preset .desc { font-size: 11.5px; color: var(--faint); line-height: 1.4; margin-top: .15rem; }
+		.fmt-slider-row { display: grid; grid-template-columns: 1fr 64px; gap: .55rem; align-items: center; padding: .15rem 0; }
+		.fmt-slider-row .val { font-weight: 600; color: var(--pink-strong); text-align: right; font-size: 13px; }
+		.fmt-slider { width: 100%; }
+		.fmt-toggle { display: flex; align-items: flex-start; gap: .55rem; padding: .55rem .75rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; margin-bottom: .35rem; }
+		.fmt-toggle.on { border-color: rgba(242, 95, 166, .45); background: var(--pink-soft); }
+		.fmt-toggle input { margin-top: 3px; width: auto; }
+		.fmt-toggle .t-title { font-weight: 600; font-size: 13px; }
+		.fmt-toggle .t-desc { font-size: 11.5px; color: var(--faint); line-height: 1.4; margin-top: .1rem; }
+		.fmt-pool-tabs { display: flex; gap: .15rem; margin: .75rem 0 .65rem; border-bottom: 1px solid var(--border); }
+		.fmt-pool-tabs button { background: transparent; border: none; padding: .45rem .85rem; font-size: 13px; font-weight: 600; color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; margin-bottom: -1px; }
+		.fmt-pool-tabs button:hover { color: var(--text); }
+		.fmt-pool-tabs button.active { color: var(--pink-strong); border-bottom-color: var(--pink); }
+		.fmt-pool-tabs button .badge { display: inline-block; margin-left: .35rem; background: var(--pink-soft); color: var(--pink-strong); font-size: 10.5px; padding: 0 .4rem; border-radius: 8px; }
+		.fmt-pool-item { display: flex; justify-content: space-between; align-items: center; padding: .35rem .6rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13px; }
+		.fmt-pool-item:hover { border-color: var(--border-2); }
+		.fmt-pool-item.banned { border-color: rgba(248, 113, 113, .4); background: var(--red-soft); }
+		.fmt-pool-item.unbanned { border-color: rgba(74, 222, 128, .4); background: var(--green-soft); }
+		.fmt-pool-item .pi-name { font-weight: 600; flex: 1; }
+		.fmt-pool-item .pi-meta { font-size: 11.5px; color: var(--faint); margin-left: .4rem; }
+		.fmt-pool-item .pi-tag { font-size: 9.5px; padding: .05rem .4rem; border-radius: 4px; font-weight: 700; margin-left: .35rem; }
+		.fmt-pool-item .pi-tag.ban { background: var(--red); color: #1b0c0c; }
+		.fmt-pool-item .pi-tag.unban { background: var(--green); color: #0c1b10; }
+		.fc-chip-row { display: flex; flex-wrap: wrap; gap: .3rem; }
+		.fc-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .12rem .55rem; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
+		.fc-chip-ban { background: var(--red-soft); color: var(--red); border-color: rgba(248, 113, 113, .35); }
+		.fc-chip-unban { background: var(--green-soft); color: var(--green); border-color: rgba(74, 222, 128, .35); }
+		.fc-chip-x { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 .15rem; font-weight: 700; }
+		.fc-search-results { margin-top: .55rem; max-height: 440px; overflow-y: auto; }
+		.fc-tier-head { font-size: 11px; font-weight: 700; color: var(--pink-strong); text-transform: uppercase; letter-spacing: .05em; padding: .5rem .25rem .2rem; border-top: 1px solid var(--border); margin-top: .2rem; }
+		.fc-tier-head:first-child { border-top: none; margin-top: 0; }
+		.fc-result-list { display: grid; gap: .25rem; padding: .25rem 0; }
+		.fc-mon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: .3rem; padding: .25rem 0; }
+		.fc-mon-grid-tight { } /* kept for ported markup */
+		.fc-mon-tile { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: .25rem; text-align: center; cursor: pointer; transition: border-color .1s; display: flex; flex-direction: column; align-items: center; gap: .1rem; }
+		.fc-mon-tile:hover { border-color: var(--pink); }
+		.fc-mon-tile.custom { border-color: rgba(242, 95, 166, .45); }
+		.fc-mon-tile.banned { background: var(--red-soft); border-color: rgba(248, 113, 113, .5); }
+		.fc-mon-tile.unbanned { background: var(--green-soft); border-color: rgba(74, 222, 128, .5); }
+		.fc-mon-sprite { width: 52px; height: 52px; object-fit: contain; image-rendering: pixelated; }
+		.fc-mon-name { font-size: 10.5px; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+		.fc-json { background: #07080c; color: var(--dim); padding: .7rem .9rem; border-radius: var(--radius-sm); font-size: 11.5px; max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; font-family: "SF Mono", ui-monospace, Consolas, monospace; border: 1px solid var(--border); }
+		.fmt-summary-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .75rem 1rem; font-size: 13px; line-height: 1.6; }
+		.wk-presets { display: flex; flex-wrap: wrap; gap: .3rem; }
+
+		/* ── Effects builder (abilities/items) ──────────────────────── */
+		.effect-block { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem .9rem; margin-bottom: .5rem; }
+		.effect-block .ehead { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+		.effect-block .ehead strong { font-size: 12.5px; color: var(--dim); }
+		.nl-box { background: linear-gradient(135deg, rgba(242, 95, 166, .09), rgba(122, 92, 220, .09)); border: 1px solid rgba(242, 95, 166, .25); border-radius: var(--radius-sm); padding: .9rem 1rem; margin: .9rem 0; }
+		.nl-box .nl-title { font-weight: 600; font-size: 13.5px; margin-bottom: .2rem; display: flex; align-items: center; gap: .45rem; }
+		.nl-box p { color: var(--dim); font-size: 12.5px; line-height: 1.45; margin: 0 0 .65rem; }
+		.code-block { background: #07080c; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .75rem; margin-bottom: .5rem; }
+		.code-block textarea { font-family: "SF Mono", ui-monospace, Consolas, monospace; font-size: 12px; background: transparent; border: none; color: #f0c7de; white-space: pre; box-shadow: none; }
+		.code-block textarea:focus { box-shadow: none; }
+		.code-block .chead { color: var(--dim); font-weight: 600; font-size: 12px; margin-bottom: .4rem; display: flex; justify-content: space-between; align-items: center; }
+
+		/* ── Audit ──────────────────────────────────────────────────── */
+		.audit-entry { display: flex; gap: .8rem; padding: .65rem 0; border-bottom: 1px solid var(--border); }
+		.audit-entry:last-child { border-bottom: none; }
+		.audit-entry .icon { width: 30px; height: 30px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex: none; color: var(--dim); }
+		.audit-entry .body { flex: 1; min-width: 0; }
+		.audit-entry .top { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; }
+		.audit-entry .who { font-weight: 600; font-size: 13px; }
+		.audit-entry .ts { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+
+		/* ── Login ──────────────────────────────────────────────────── */
+		.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: radial-gradient(1100px 500px at 50% -10%, rgba(242, 95, 166, .14), transparent), var(--bg); }
+		.login-card { background: var(--panel); border: 1px solid var(--border); padding: 2.1rem; border-radius: 14px; box-shadow: var(--shadow); width: 100%; max-width: 380px; }
+		.login-card .logo { display: flex; justify-content: center; margin-bottom: .8rem; }
+		.login-card .logo .dot { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--pink), #b04ddb); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 22px; }
+		.login-card h1 { margin: 0 0 .3rem; font-size: 19px; text-align: center; }
+		.login-card p { margin: 0 0 1.4rem; color: var(--dim); text-align: center; font-size: 13px; }
+
+		/* ── Toast ──────────────────────────────────────────────────── */
+		.toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: var(--radius-sm); padding: .7rem 1.1rem; box-shadow: var(--shadow); z-index: 200; max-width: min(620px, 90vw); font-size: 13px; }
+		.toast.success { border-left: 3px solid var(--green); }
+		.toast.error { border-left: 3px solid var(--red); }
+		.toast.info { border-left: 3px solid var(--pink); }
+
+		pre.cmd-block { background: #07080c; color: var(--pink-strong); padding: .7rem .9rem; border-radius: var(--radius-sm); font-size: 12.5px; border: 1px solid var(--border); font-family: "SF Mono", ui-monospace, Consolas, monospace; white-space: pre; margin: 0; user-select: all; }
+
+		@media (max-width: 860px) {
+			.sidebar { position: static; width: 100%; inset: auto; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--border); }
+			.app { flex-direction: column; }
+			.nav { flex-direction: row; flex-wrap: wrap; }
+			.nav-label { display: none; }
+			.side-foot { flex-direction: row; align-items: center; border-top: none; margin-left: auto; }
+			.main { margin-left: 0; padding: 1.1rem 1rem 3rem; }
+			.grid-2, .grid-3 { grid-template-columns: 1fr; }
+			.type-pick { grid-template-columns: repeat(4, 1fr); }
+			.modal { width: 100vw; }
+		}
 	</style>
 </head>
 <body>
@@ -419,6 +506,7 @@ const el = (tag, attrs = {}, ...children) => {
 		if (k === "on") for (const ev in attrs.on) e.addEventListener(ev, attrs.on[ev]);
 		else if (k === "style") Object.assign(e.style, attrs.style);
 		else if (k === "class") e.className = attrs[k];
+		else if (k === "list") e.setAttribute("list", attrs[k]); // .list is a read-only DOM property
 		else if (k in e) e[k] = attrs[k];
 		else e.setAttribute(k, attrs[k]);
 	}
@@ -436,12 +524,48 @@ function normSearch(s) { return String(s).toLowerCase().trim().replace(/[^a-z0-9
 const ADMIN_BASE = location.pathname === "/admin" || location.pathname.startsWith("/admin/") ? "/admin" : "";
 function adminApiPath(path) { return ADMIN_BASE + path; }
 
+// ─── Icons (feather-style, 24px viewBox, stroked) ────────────────────────────
+const ICON_PATHS = {
+	home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>',
+	mon: '<circle cx="12" cy="12" r="9"/><path d="M3 12h6"/><path d="M15 12h6"/><circle cx="12" cy="12" r="3"/>',
+	zap: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>',
+	sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+	bag: '<path d="M5 8h14l-1 13H6L5 8z"/><path d="M8 8a4 4 0 0 1 8 0"/>',
+	trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M12 14v4"/><path d="M8 21h8"/><path d="M9 18h6v3H9z"/>',
+	scroll: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/>',
+	rocket: '<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2"/><path d="M9 13 4.5 8.5C7 4 12 3 19 3c0 7-1 12-5.5 14.5L9 13z"/><circle cx="14" cy="9" r="1.6"/>',
+	plus: '<path d="M12 5v14M5 12h14"/>',
+	search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/>',
+	x: '<path d="M18 6 6 18M6 6l12 12"/>',
+	chev: '<path d="m9 6 6 6-6 6"/>',
+	back: '<path d="M19 12H5"/><path d="m11 18-6-6 6-6"/>',
+	edit: '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="m13.5 6.5 3 3"/>',
+	copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+	trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 14h10l1-14"/>',
+	image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 19 6-6 4 4 3-3 3 3"/>',
+	check: '<path d="m4.5 12.5 5 5L19.5 7"/>',
+	warn: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.2v.3"/>',
+	out: '<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 14v6H4V4h6"/>',
+	logout: '<path d="M9 4H4v16h5"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/>',
+	wand: '<path d="m6 18 12-12"/><path d="M14 4l1.5 1.5M19 9l1 1M17 3l.5.5M20.5 6.5l.5.5"/>',
+	key: '<circle cx="8" cy="14" r="4"/><path d="m11 11 8-8"/><path d="m16 6 3 3"/>',
+	user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+	book: '<path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 1-2-2V5z"/><path d="M20 17H6a2 2 0 0 0-2 2"/>',
+	gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+};
+function icon(name, size) {
+	const s = size || 16;
+	const span = el("span", { class: "ic", style: { display: "inline-flex", flexShrink: "0" } });
+	span.innerHTML = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (ICON_PATHS[name] || "") + '</svg>';
+	return span;
+}
+
 // ─── API client ──────────────────────────────────────────────────────────────
 let _apiBusyCount = 0;
-const _busyEl = el("div", { id: "busy-overlay", style: { display: "none", position: "fixed", inset: 0, zIndex: 99999, background: "rgba(31,20,40,.4)", alignItems: "center", justifyContent: "center", pointerEvents: "auto" } },
-	el("div", { style: { display: "flex", alignItems: "center", gap: ".75rem", background: "#2a1a3a", padding: "1rem 1.5rem", borderRadius: 8, color: "#ffd1ee", fontSize: "11pt", fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,.4)" } },
-		el("span", { style: { display: "inline-block", width: 20, height: 20, border: "3px solid #ff5cb6", borderTopColor: "transparent", borderRadius: "50%", animation: "spinner .6s linear infinite" } }),
-		"Loading…",
+const _busyEl = el("div", { id: "busy-overlay", style: { display: "none", position: "fixed", inset: 0, zIndex: 99999, background: "rgba(7,8,12,.45)", alignItems: "center", justifyContent: "center", pointerEvents: "auto" } },
+	el("div", { style: { display: "flex", alignItems: "center", gap: ".7rem", background: "#1b1f2d", border: "1px solid #343c54", padding: ".9rem 1.3rem", borderRadius: "10px", color: "#e8ebf3", fontSize: "13.5px", fontWeight: 600, boxShadow: "0 8px 28px rgba(0,0,0,.5)" } },
+		el("span", { style: { display: "inline-block", width: 18, height: 18, border: "3px solid #f25fa6", borderTopColor: "transparent", borderRadius: "50%", animation: "spinner .6s linear infinite" } }),
+		"Working…",
 	),
 );
 document.head.appendChild(el("style", {}, "@keyframes spinner { to { transform: rotate(360deg); } }"));
@@ -487,15 +611,14 @@ const COLORS = ["Red", "Blue", "Yellow", "Green", "Black", "Brown", "Purple", "G
 const EGG_GROUPS = ["Monster", "Water 1", "Water 2", "Water 3", "Bug", "Flying", "Field", "Fairy", "Grass", "Human-Like", "Mineral", "Amorphous", "Ditto", "Dragon", "Undiscovered"];
 const TIERS = ["AG", "Uber", "OU", "UUBL", "UU", "RUBL", "RU", "NUBL", "NU", "PUBL", "PU", "ZUBL", "ZU", "NFE", "LC", "Illegal", "Unreleased"];
 const DOUBLES_TIERS = ["DUber", "DOU", "DBL", "DUU", "(DUU)", "NFE", "LC"];
-const STATUSES = ["brn", "par", "slp", "frz", "psn", "tox"];
 const STATS = ["hp", "atk", "def", "spa", "spd", "spe"];
 const STAT_NAMES = { hp: "HP", atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe" };
 function statColor(v) {
-	if (v < 50) return "#dc3545";
-	if (v < 80) return "#fd7e14";
-	if (v < 100) return "#f0b400";
-	if (v < 120) return "#82c91e";
-	return "#198754";
+	if (v < 50) return "#f87171";
+	if (v < 80) return "#fb923c";
+	if (v < 100) return "#fbbf24";
+	if (v < 120) return "#a3e635";
+	return "#4ade80";
 }
 
 // ─── Reusable UI bits ────────────────────────────────────────────────────────
@@ -506,11 +629,11 @@ function helpIcon(text) {
 	return el("span", { class: "help", title: text }, "?");
 }
 function field(label, control, hint, helpText) {
-	const labelEl = el("label", {},
+	const labelEl = label ? el("label", {},
 		el("span", {}, label),
 		helpText ? helpIcon(helpText) : null,
-	);
-	const fieldKey = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+	) : null;
+	const fieldKey = (label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 	return el("div", { class: "field", "data-field": fieldKey }, labelEl, control, hint ? el("div", { class: "hint" }, hint) : null);
 }
 function textInput(d, key, opts) {
@@ -529,11 +652,18 @@ function selectInput(d, key, options, opts) {
 		),
 	);
 }
+function searchBox(placeholder, oninput) {
+	return el("div", { class: "search-wrap" },
+		icon("search", 14),
+		el("input", { type: "text", placeholder: placeholder, on: { input: oninput } }),
+	);
+}
 
 // ─── App state ───────────────────────────────────────────────────────────────
 const state = {
 	authed: false,
 	view: "home",
+	editor: null,     // { type: "species"|"formats", data, rev, existingId } → full-page editor
 	effects: [],
 	displayName: null,
 	botConfigured: false,
@@ -541,15 +671,17 @@ const state = {
 	publishConfigured: false,
 	publishStatus: null,
 	pendingChanges: 0, // bumped on every successful save; cleared on Apply
-	psAbilities: [],  // lazy-loaded from /api/ps-dex/abilities for autocomplete
-	psSpecies: [],    // lazy-loaded from /api/ps-dex/species for the Format Workshop
-	psMoves: [],      // lazy-loaded from /api/ps-dex/moves for the Learnset editor
-	customSpecies: [], // lazy-loaded from /api/species for the Format Workshop
-	customAbilities: [], // lazy-loaded from /api/abilities so the species editor can pick them
-	customMoves: [],     // lazy-loaded from /api/moves for the learnset editor
+	psAbilities: [],
+	psSpecies: [],
+	psMoves: [],
+	customSpecies: [],
+	customAbilities: [],
+	customMoves: [],
 	customItems: [],
-	_modSpecies: {},     // lazy-loaded { modId: speciesName[] } for gen-aware banlist filtering
-	psUrl: "http://localhost:8000/", // best-effort link to the PS server (heuristic from current host)
+	customLearnsets: [],
+	customFormats: [],
+	_modSpecies: {},
+	psUrl: "http://localhost:8000/",
 };
 
 function applyMe(me) {
@@ -568,6 +700,7 @@ function pendingCount() {
 function markPendingChange() {
 	state.pendingChanges++;
 	state.publishStatus = null;
+	refreshSidebarDeploy();
 }
 async function refreshPublishStatus() {
 	if (!state.hosted) return;
@@ -578,6 +711,7 @@ async function refreshPublishStatus() {
 	} catch (err) {
 		state.publishStatus = { changed: [], error: err.message || String(err) };
 	}
+	refreshSidebarDeploy();
 }
 
 function setToast(kind, text, durationMs) {
@@ -601,7 +735,6 @@ async function prefetchAfterAuth() {
 	try { const cf = await api("GET", "/api/formats"); state.customFormats = cf.items || []; } catch {}
 	await refreshPublishStatus();
 	// Heuristic for the PS server URL: if we're on host:port, PS is typically host:8000.
-	// Override via env-driven server response later if needed.
 	try {
 		if (state.hosted) state.psUrl = location.origin + "/";
 		else {
@@ -611,7 +744,19 @@ async function prefetchAfterAuth() {
 	} catch {}
 }
 
-// ─── Boot ────────────────────────────────────────────────────────────────────
+async function refreshEntityCache(type) {
+	try {
+		const r = await api("GET", "/api/" + type);
+		if (type === "species") state.customSpecies = r.items || [];
+		else if (type === "abilities") state.customAbilities = r.items || [];
+		else if (type === "moves") state.customMoves = r.items || [];
+		else if (type === "items") state.customItems = r.items || [];
+		else if (type === "learnsets") state.customLearnsets = r.items || [];
+		else if (type === "formats") state.customFormats = r.items || [];
+	} catch {}
+}
+
+// ─── Boot / routing ──────────────────────────────────────────────────────────
 window.addEventListener("hashchange", () => { renderRouted(); });
 async function boot() {
 	try {
@@ -624,8 +769,11 @@ async function boot() {
 	renderRouted();
 }
 function renderRouted() {
-	if (!state.authed) { state.view = "login"; render(); return; }
-	const hash = location.hash.replace(/^#/, "") || "home";
+	if (!state.authed) { state.view = "login"; state.editor = null; render(); return; }
+	let hash = location.hash.replace(/^#/, "") || "home";
+	// Legacy routes from the old layout
+	if (hash === "sprites" || hash === "learnsets" || hash === "advanced") hash = "species";
+	if (state.view !== hash) state.editor = null; // navigating away closes the editor page
 	state.view = hash;
 	render();
 }
@@ -634,21 +782,6 @@ function render() {
 	empty(r);
 	if (state.view === "login") return r.appendChild(renderLogin());
 	r.appendChild(renderShell());
-	maybeRenderFab();
-}
-
-function maybeRenderFab() {
-	const existing = $(".fab"); if (existing) existing.remove();
-	if (pendingCount() <= 0) return;
-	const label = state.hosted
-		? "Publish saved changes"
-		: state.botConfigured
-		? "⚡ Save changes — Build & push live"
-		: "⚡ Build now (then paste /hotpatch)";
-	const fab = el("div", { class: "fab" },
-		el("button", { class: "primary", on: { click: doBuildAndApply } }, label),
-	);
-	document.body.appendChild(fab);
 }
 
 // ─── Login ───────────────────────────────────────────────────────────────────
@@ -668,223 +801,270 @@ function renderLogin() {
 	};
 	return el("div", { class: "login-page" },
 		el("form", { class: "login-card", on: { submit } },
-			el("div", { class: "logo" }, "Pinkacord"),
-			el("h1", {}, "Admin"),
-			el("p", {}, "Sign in to build custom Pokémon and run your community server."),
+			el("div", { class: "logo" }, el("div", { class: "dot" }, "P")),
+			el("h1", {}, "Pinkacord Admin"),
+			el("p", {}, "Manage your community's custom Pokémon, formats, and server."),
 			el("div", { class: "field" },
 				el("label", {}, "Your name"),
-				nameInput = el("input", { type: "text", autofocus: true, required: true, autocomplete: "nickname", placeholder: "Riku, ash, etc." }),
-				el("div", { class: "hint" }, "Shows up in the change log so we know who made what."),
+				nameInput = el("input", { type: "text", autofocus: true, required: true, autocomplete: "nickname", placeholder: "Riku, ash, …" }),
+				el("div", { class: "hint" }, "Shows in the change log so everyone knows who changed what."),
 			),
 			el("div", { class: "field" },
 				el("label", {}, "Admin password"),
 				pwInput = el("input", { type: "password", required: true, autocomplete: "current-password" }),
 			),
 			errorEl = el("div", { class: "field-error" }),
-			el("button", { type: "submit", class: "primary huge", style: { width: "100%" } }, "Sign in"),
+			el("button", { type: "submit", class: "btn btn-primary btn-lg", style: { width: "100%", justifyContent: "center", marginTop: ".4rem" } }, "Sign in"),
 		)
 	);
 }
 
-// ─── Shell ───────────────────────────────────────────────────────────────────
+// ─── Shell: sidebar + main ───────────────────────────────────────────────────
 function renderShell() {
-	return el("div", {},
-		renderHeader(),
-		renderNav(),
-		el("main", {}, renderContent()),
+	return el("div", { class: "app" },
+		renderSidebar(),
+		el("main", { class: "main" }, renderContent()),
 	);
 }
-function renderHeader() {
-	return el("header", {},
-		el("h1", {}, el("span", { class: "pink" }, "Pinkacord"), " Admin"),
-		el("div", { class: "right" },
-			state.displayName ? el("span", { class: "who" }, "Hi, " + state.displayName) : null,
-			el("button", { on: { click: doLogout } }, "Sign out"),
+
+const NAV_ITEMS = [
+	{ id: "home", label: "Dashboard", icon: "home", group: null },
+	{ id: "species", label: "Pokémon", icon: "mon", group: "Content", count: () => (state.customSpecies || []).length },
+	{ id: "moves", label: "Moves", icon: "zap", group: "Content", count: () => (state.customMoves || []).length },
+	{ id: "abilities", label: "Abilities", icon: "sparkle", group: "Content", count: () => (state.customAbilities || []).length },
+	{ id: "items", label: "Items", icon: "bag", group: "Content", count: () => (state.customItems || []).length },
+	{ id: "formats", label: "Formats", icon: "trophy", group: "Content", count: () => (state.customFormats || []).length },
+	{ id: "audit", label: "Change log", icon: "scroll", group: "Server" },
+];
+
+function renderSidebar() {
+	const nav = el("nav", { class: "nav" });
+	let lastGroup = null;
+	for (const item of NAV_ITEMS) {
+		if (item.group && item.group !== lastGroup) {
+			nav.appendChild(el("div", { class: "nav-label" }, item.group));
+			lastGroup = item.group;
+		}
+		const cnt = item.count ? item.count() : null;
+		nav.appendChild(el("a", { href: "#" + item.id, class: state.view === item.id ? "active" : "" },
+			icon(item.icon, 16),
+			item.label,
+			cnt ? el("span", { class: "count" }, String(cnt)) : null,
+		));
+	}
+	nav.appendChild(el("div", { class: "nav-label" }, ""));
+	nav.appendChild(el("a", { href: state.psUrl || "http://localhost:8000/", target: "_blank", on: { click: (e) => { e.preventDefault(); window.open(state.psUrl || "http://localhost:8000/", "_blank"); } } },
+		icon("out", 16), "Open PS server",
+	));
+
+	const initial = (state.displayName || "A").trim().charAt(0).toUpperCase();
+	return el("div", { class: "sidebar" },
+		el("div", { class: "brand" },
+			el("div", { class: "dot" }, "P"),
+			el("div", {},
+				el("div", { class: "name" }, el("span", {}, "Pinkacord"), " Admin"),
+				el("div", { class: "sub" }, "custom dex manager"),
+			),
+		),
+		nav,
+		el("div", { class: "side-foot" },
+			renderDeployBox(),
+			el("div", { class: "who-row" },
+				el("div", { class: "avatar" }, initial),
+				el("div", { class: "wname" }, state.displayName || "admin"),
+				el("button", { class: "signout", title: "Sign out", on: { click: doLogout } }, icon("logout", 15)),
+			),
 		),
 	);
 }
-function renderNav() {
-	const link = (id, label) => el("a", { href: "#" + id, class: state.view === id ? "active" : "" }, label);
-	return el("nav", {},
-		link("home", "Home"),
-		link("species", "Pokémon"),
-		link("moves", "Moves"),
-		link("abilities", "Abilities"),
-		link("items", "Items"),
-		link("learnsets", "Learnsets"),
-		link("formats", "Format Workshop"),
-		link("sprites", "Sprites"),
-		link("audit", "Change log"),
+
+function renderDeployBox() {
+	const count = pendingCount();
+	const mode = state.hosted ? "GitHub → Render" : state.botConfigured ? "Build + hotpatch" : "Build (manual hotpatch)";
+	const box = el("div", { class: "deploy-box", id: "deploy-box" },
+		el("div", { class: "row1" },
+			el("span", { class: "deploy-status " + (count > 0 ? "pending" : "live") },
+				el("span", { class: "led" }),
+				count > 0 ? count + " pending change" + (count === 1 ? "" : "s") : "Everything live",
+			),
+		),
+		el("button", { class: "btn " + (count > 0 ? "btn-primary" : "btn-quiet"), disabled: state.hosted ? (!state.publishConfigured || count === 0) : count === 0, on: { click: doBuildAndApply } },
+			icon("rocket", 14),
+			state.hosted ? "Publish" : "Deploy",
+		),
+		el("div", { class: "mode", style: { marginTop: ".4rem" } }, mode),
 	);
+	return box;
 }
+// Refresh just the sidebar deploy box without a full re-render (keeps focus).
+function refreshSidebarDeploy() {
+	const existing = $("#deploy-box");
+	if (!existing) return;
+	const fresh = renderDeployBox();
+	existing.replaceWith(fresh);
+}
+
 function renderContent() {
+	if (state.editor) {
+		if (state.editor.type === "species") return renderSpeciesEditorPage();
+		if (state.editor.type === "formats") return renderFormatEditorPage();
+	}
 	if (state.view === "home") return renderHome();
 	if (state.view === "species") return renderSpeciesList();
-	if (state.view === "moves") return renderEntityList("moves", "Moves", "⚡");
-	if (state.view === "abilities") return renderEntityList("abilities", "Abilities", "🔮");
-	if (state.view === "items") return renderEntityList("items", "Items", "🧪");
-	if (state.view === "learnsets") return renderEntityList("learnsets", "Learnsets", "📖");
-	if (state.view === "formats") return renderEntityList("formats", "Formats", "🏆");
-	if (state.view === "sprites") return renderSpritesGallery();
-	if (state.view === "advanced") return renderAdvanced();
+	if (state.view === "moves") return renderEntityList("moves", "Moves", "zap", "Custom moves your Pokémon can learn.");
+	if (state.view === "abilities") return renderEntityList("abilities", "Abilities", "sparkle", "Custom abilities — describe them in plain English or compose effects.");
+	if (state.view === "items") return renderEntityList("items", "Items", "bag", "Custom held items.");
+	if (state.view === "formats") return renderFormatsList();
 	if (state.view === "audit") return renderAudit();
 	return el("div", { class: "card empty" }, "Not found");
 }
 
-// ─── Home / Dashboard ─────────────────────────────────────────────────────────
+// ─── Dashboard ───────────────────────────────────────────────────────────────
 function renderHome() {
 	const wrap = el("div", {});
-	const hero = el("div", { class: "card hero" },
-		el("h2", {}, "🌸 Welcome back" + (state.displayName ? ", " + state.displayName : "")),
-		el("p", {}, "Build custom Pokémon, invent abilities and formats — no coding required. Everything you create here runs on your Pokémon Showdown server."),
-		el("div", { style: { display: "flex", gap: ".75rem", flexWrap: "wrap" } },
-			el("button", { class: "primary huge", on: { click: () => openEditor("species", null) } }, "+  New Pokémon"),
-			el("button", { class: "secondary", on: { click: () => openEditor("moves", null) } }, "+  New move"),
-			el("button", { class: "secondary", on: { click: () => openEditor("abilities", null) } }, "+  New ability"),
-			el("button", { class: "secondary", on: { click: () => openEditor("formats", null) } }, "+  New format"),
-			el("button", { class: "ghost", on: { click: () => { window.open(state.psUrl || "http://localhost:8000/", "_blank"); } } }, "🌐 Open PS server"),
+	wrap.appendChild(el("div", { class: "page-head" },
+		el("div", {},
+			el("h1", {}, "Welcome back" + (state.displayName ? ", " + state.displayName : "")),
+			el("div", { class: "sub" }, "Everything you create here runs on your Pokémon Showdown server."),
 		),
-	);
-	wrap.appendChild(hero);
+		el("div", { class: "actions" },
+			el("button", { class: "btn btn-primary", on: { click: () => openSpeciesEditor(null) } }, icon("plus", 14), "New Pokémon"),
+			el("button", { class: "btn", on: { click: () => openFormatEditor(null) } }, icon("plus", 14), "New format"),
+		),
+	));
 
-	// Stats card — live counts of everything
-	const statsCard = el("div", { class: "card compact" }, el("h2", {}, "📊 Overview"));
-	const statGrid = el("div", { class: "grid-3" });
+	// Counts
+	const statGrid = el("div", { class: "stat-row-grid" });
 	const ENTITY_STATS = [
-		["species", "✨", "Pokémon", state.customSpecies ? state.customSpecies.length : "…"],
-		["moves", "⚡", "Custom moves", state.customMoves ? state.customMoves.length : "…"],
-		["abilities", "🔮", "Abilities", state.customAbilities ? state.customAbilities.length : "…"],
-		["items", "🧪", "Items", state.customItems ? state.customItems.length : "…"],
-		["formats", "🏆", "Formats", state.customFormats ? state.customFormats.length : "…"],
-		["learnsets", "📖", "Learnsets", state.customLearnsets ? state.customLearnsets.length : "…"],
+		["species", "mon", "Pokémon", (state.customSpecies || []).length],
+		["moves", "zap", "Moves", (state.customMoves || []).length],
+		["abilities", "sparkle", "Abilities", (state.customAbilities || []).length],
+		["items", "bag", "Items", (state.customItems || []).length],
+		["formats", "trophy", "Formats", (state.customFormats || []).length],
 	];
-	for (const [etype, emoji, label, count] of ENTITY_STATS) {
+	for (const [etype, ic, label, count] of ENTITY_STATS) {
 		statGrid.appendChild(el("div", { class: "stat-tile", on: { click: () => { location.hash = etype; } } },
 			el("div", { class: "stat-val" }, String(count)),
-			el("div", { class: "stat-label" }, emoji + "  " + label),
+			el("div", { class: "stat-label" }, icon(ic, 13), label),
 		));
 	}
-	statsCard.appendChild(statGrid);
-	wrap.appendChild(statsCard);
+	wrap.appendChild(statGrid);
 
-	// Workflow — guided path for new users
-	const workflow = el("div", { class: "card compact" }, el("h2", {}, "🎯 Quick-start — make your first format"));
-	const steps = [
-		{ emoji: "1", label: "Create a Pokémon", desc: "Add a custom species with name, type, stats, and sprite.", action: () => openEditor("species", null), btn: "+  Add Pokémon" },
-		{ emoji: "2", label: "Add a move", desc: "Create a signature move for your Pokémon — or let AI write it.", action: () => openEditor("moves", null), btn: "+  Add move" },
-		{ emoji: "3", label: "Create a format", desc: "Build a format that uses your custom dex. Pick gens, rules, and bans.", action: () => openEditor("formats", null), btn: "+  New format" },
-		{ emoji: "4", label: state.hosted ? "Publish" : "Build & deploy", desc: state.hosted ? "Commit saved changes to GitHub. Render redeploys them automatically." : "Push everything to the live server. Your custom content is ready to battle!", action: doBuildAndApply, btn: state.hosted ? "Publish" : "⚡  Build now" },
-	];
-	const stepRow = el("div", { style: { display: "flex", gap: ".5rem", flexWrap: "wrap" } });
-	for (const s of steps) {
-		stepRow.appendChild(el("div", { class: "workflow-step" },
-			el("div", { class: "ws-badge" }, s.emoji),
-			el("div", { class: "ws-body" },
-				el("div", { class: "ws-title" }, s.label),
-				el("div", { class: "ws-desc" }, s.desc),
-				el("button", { class: "secondary", style: { marginTop: ".35rem", fontSize: ".8rem" }, on: { click: s.action } }, s.btn),
-			),
-		));
-	}
-	workflow.appendChild(stepRow);
-	wrap.appendChild(workflow);
-
-	// Deploy status
-	wrap.appendChild(renderDeployCard());
-
-	// Recent activity — last 5 audit entries
-	wrap.appendChild(renderHomeActivity());
-
+	const cols = el("div", { class: "dash-cols" });
+	cols.appendChild(renderHomeActivity());
+	cols.appendChild(renderDeployCard());
+	wrap.appendChild(cols);
 	return wrap;
 }
+
 function renderHomeActivity() {
-	const card = el("div", { class: "card compact" }, el("h2", {}, "📜 Recent activity"), el("div", { class: "empty" }, "Loading…"));
+	const card = el("div", { class: "card" }, el("h2", {}, "Recent activity"), el("div", { class: "empty" }, "Loading…"));
 	api("GET", "/api/audit").then((r) => {
 		empty(card);
-		card.appendChild(el("h2", {}, "📜 Recent activity"));
-		const list = r.entries ? r.entries.slice(0, 8) : [];
+		card.appendChild(el("h2", {}, "Recent activity"));
+		const list = r.entries ? r.entries.slice(0, 10) : [];
 		if (list.length === 0) {
 			card.appendChild(el("div", { class: "empty", style: { padding: "1rem 0" } }, "No changes yet. Save your first creation and it'll show up here."));
 			return;
 		}
 		for (const e of list) {
-			const icons = { create: "✨", update: "✏️", delete: "🗑️", build: "⚡", hotpatch: "🚀", publish: "🚀", auth: "🔑" };
-			const icon = Object.entries(icons).find(([k]) => e.action.includes(k))?.[1] || "•";
 			card.appendChild(el("div", { class: "activity-row" },
-				el("span", { class: "act-icon" }, icon),
+				el("span", { class: "act-icon" }, icon(auditIconName(e.action), 14)),
 				el("span", { class: "act-body" },
 					el("span", { class: "act-who" }, e.actor),
-					" ", e.action,
-					e.id ? el("span", { class: "act-id" }, " " + e.id) : null,
+					" " + e.action + " ",
+					e.id ? el("span", { class: "act-id" }, e.id) : null,
 				),
-				el("span", { class: "act-ts" }, new Date(e.ts).toLocaleString()),
+				el("span", { class: "act-ts" }, relativeTime(e.ts)),
 			));
 		}
-		if (r.entries && r.entries.length > 8) {
-			card.appendChild(el("button", { class: "ghost", style: { marginTop: ".4rem" }, on: { click: () => { location.hash = "audit"; } } }, "View all →"));
-		}
-	}).catch(() => { empty(card); card.appendChild(el("h2", {}, "📜 Recent activity")); card.appendChild(el("div", { class: "empty" }, "Couldn't load activity.")); });
+		card.appendChild(el("button", { class: "btn btn-ghost btn-sm", style: { marginTop: ".5rem" }, on: { click: () => { location.hash = "audit"; } } }, "View full log"));
+	}).catch(() => { empty(card); card.appendChild(el("h2", {}, "Recent activity")); card.appendChild(el("div", { class: "empty" }, "Couldn't load activity.")); });
 	return card;
 }
-// Deploy card
+function auditIconName(action) {
+	if (action.startsWith("auth")) return "key";
+	if (action.startsWith("publish") || action.startsWith("hotpatch")) return "rocket";
+	if (action.startsWith("build")) return "zap";
+	if (action.startsWith("sprite")) return "image";
+	if (action.includes("create")) return "plus";
+	if (action.includes("update")) return "edit";
+	if (action.includes("delete")) return "trash";
+	return "scroll";
+}
+function relativeTime(ts) {
+	const t = new Date(ts).getTime();
+	if (!t) return "";
+	const s = Math.floor((Date.now() - t) / 1000);
+	if (s < 60) return "just now";
+	if (s < 3600) return Math.floor(s / 60) + "m ago";
+	if (s < 86400) return Math.floor(s / 3600) + "h ago";
+	if (s < 86400 * 7) return Math.floor(s / 86400) + "d ago";
+	return new Date(ts).toLocaleDateString();
+}
+
 function renderDeployCard() {
-	const card = el("div", { class: "card compact" });
-	card.appendChild(el("h2", {}, state.hosted ? "Publish to live server" : "🚀 Build & Deploy"));
-	const status = el("div", { style: { display: "flex", gap: ".5rem", alignItems: "center", flexWrap: "wrap", marginBottom: ".4rem" } });
+	const card = el("div", { class: "card" });
+	card.appendChild(el("h2", {}, "Deploy"));
+	const count = pendingCount();
+	const status = el("div", { style: { display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap", marginBottom: ".7rem" } });
 	if (state.hosted) {
-		status.appendChild(el("span", { class: "deploy-pill " + (state.publishConfigured ? "ok" : "warn") },
+		status.appendChild(el("span", { class: "pill " + (state.publishConfigured ? "ok" : "warn") },
 			state.publishConfigured ? "GitHub publish ready" : "GitHub publish not configured"));
 	} else {
-		status.appendChild(el("span", { class: "deploy-pill " + (state.botConfigured ? "ok" : "warn") },
-			state.botConfigured ? "🤖 Auto-hotpatch" : "📋 Manual deploy"));
+		status.appendChild(el("span", { class: "pill " + (state.botConfigured ? "ok" : "warn") },
+			state.botConfigured ? "Auto-hotpatch via bot" : "Manual hotpatch"));
 	}
-	const count = pendingCount();
-	status.appendChild(el("span", { class: "deploy-pill " + (count > 0 ? "pending" : "clean") },
-		count > 0 ? "● " + count + " pending" : "✓ Live"));
+	status.appendChild(el("span", { class: "pill " + (count > 0 ? "accent" : "ok") },
+		count > 0 ? count + " pending" : "Live"));
 	card.appendChild(status);
 	if (state.hosted) {
-		card.appendChild(el("p", { style: { margin: "0 0 .75rem 0", color: "#5a4a6a", fontSize: ".9rem", lineHeight: "1.45" } },
+		card.appendChild(el("p", { style: { margin: "0 0 .75rem", color: "var(--dim)", fontSize: "12.5px", lineHeight: "1.5" } },
 			state.publishConfigured
-				? "Publish commits saved content to GitHub. Render will rebuild and restart the server automatically in a few minutes."
+				? "Publish commits saved content to GitHub. Render rebuilds and restarts the server automatically in a few minutes."
 				: "Set PINKACORD_GITHUB_TOKEN and PINKACORD_GITHUB_REPO in Render to enable one-click publishing."));
 		if (state.publishStatus && state.publishStatus.error) {
 			card.appendChild(el("div", { class: "banner error" }, "Publish status check failed: " + state.publishStatus.error));
 		}
+		if (state.publishStatus && state.publishStatus.changed && state.publishStatus.changed.length) {
+			card.appendChild(el("div", { style: { fontSize: "12px", color: "var(--faint)", marginBottom: ".6rem" } },
+				"Changed files: " + state.publishStatus.changed.slice(0, 6).join(", ") + (state.publishStatus.changed.length > 6 ? " +" + (state.publishStatus.changed.length - 6) + " more" : "")));
+		}
 	}
 	const row = el("div", { style: { display: "flex", gap: ".5rem", flexWrap: "wrap" } });
-	row.appendChild(el("button", { class: "primary", disabled: state.hosted ? (!state.publishConfigured || count === 0) : count === 0, on: { click: doBuildAndApply } }, state.hosted ? "Publish & deploy" : (state.botConfigured ? "⚡ Build & deploy" : "⚡ Build")));
+	row.appendChild(el("button", { class: "btn btn-primary", disabled: state.hosted ? (!state.publishConfigured || count === 0) : count === 0, on: { click: doBuildAndApply } },
+		icon("rocket", 14), state.hosted ? "Publish & deploy" : (state.botConfigured ? "Build & deploy" : "Build")));
 	if (state.hosted) {
-		row.appendChild(el("button", { class: "secondary", on: { click: async () => { await refreshPublishStatus(); render(); } } }, "Refresh status"));
+		row.appendChild(el("button", { class: "btn btn-quiet", on: { click: async () => { await refreshPublishStatus(); render(); } } }, "Refresh status"));
 	}
-	row.appendChild(el("button", { class: "ghost", on: { click: () => { window.open(state.psUrl || "http://localhost:8000/", "_blank"); } } }, "🌐 Open PS"));
-	row.appendChild(el("button", { class: "ghost", on: { click: () => { location.hash = "audit"; } } }, "📜 Log"));
 	card.appendChild(row);
-	if (!state.hosted && !state.botConfigured && count === 0) {
+	if (!state.hosted && !state.botConfigured) {
 		const cmds = ["/hotpatch formats", "/hotpatch battles", "/hotpatch teamvalidator"];
-		card.appendChild(el("div", { style: { fontSize: ".75rem", color: "#5a4a6a", marginTop: ".5rem", display: "flex", gap: ".4rem", alignItems: "center" } },
+		card.appendChild(el("div", { style: { fontSize: "12px", color: "var(--faint)", marginTop: ".7rem", display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap" } },
 			el("span", {}, "After Build, paste in PS chat:"),
-			el("code", { class: "cmd-inline", on: { click: () => navigator.clipboard.writeText(cmds.join("\n")).then(() => setToast("success", "Copied")).catch(() => {}) } }, cmds.join(" ")),
+			el("code", { class: "cmd-inline", on: { click: () => navigator.clipboard.writeText(cmds.join("\n")).then(() => setToast("success", "Copied")).catch(() => {}) } }, cmds.join("  ")),
 		));
 	}
 	return card;
 }
 
-// ─── Species list ────────────────────────────────────────────────────────────
+// ─── Pokémon list ────────────────────────────────────────────────────────────
 function renderSpeciesList() {
 	const wrap = el("div", {});
-	wrap.appendChild(el("div", { class: "card compact" },
-		el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-			el("h2", { style: { margin: 0 } }, "✨ Your custom Pokédex"),
-			el("button", { class: "primary", on: { click: () => openEditor("species", null) } }, "+  New Pokémon"),
+	wrap.appendChild(el("div", { class: "page-head" },
+		el("div", {},
+			el("h1", {}, "Pokémon"),
+			el("div", { class: "sub" }, "Your custom Pokédex — stats, abilities, moves, and sprites all live in one editor."),
+		),
+		el("div", { class: "actions" },
+			el("button", { class: "btn btn-primary", on: { click: () => openSpeciesEditor(null) } }, icon("plus", 14), "New Pokémon"),
 		),
 	));
-	const card = el("div", { class: "card" });
-	wrap.appendChild(card);
 	const filter = { q: "", type: "", tier: "", sprite: "" };
 	let all = [];
 	const searchDebounce = debounce((fn) => fn(), 180);
 	const toolbar = el("div", { class: "list-toolbar" },
-		el("input", { type: "text", class: "grow", placeholder: "Search by name or id…", on: { input: (e) => { filter.q = e.target.value; searchDebounce(() => rebuild()); } } }),
+		searchBox("Search by name or id…", (e) => { filter.q = e.target.value; searchDebounce(() => rebuild()); }),
 		el("select", { on: { change: (e) => { filter.type = e.target.value; rebuild(); } } },
 			...[""].concat(TYPES).map((t) => el("option", { value: t }, t || "All types"))),
 		el("select", { on: { change: (e) => { filter.tier = e.target.value; rebuild(); } } },
@@ -893,16 +1073,15 @@ function renderSpeciesList() {
 			el("option", { value: "" }, "Sprite: any"),
 			el("option", { value: "yes" }, "Has sprite"),
 			el("option", { value: "no" }, "Missing sprite")),
-		el("button", { class: "ghost", on: { click: () => { card.querySelectorAll("input,select").forEach((n, i) => { if (i === 0) n.value = ""; else n.selectedIndex = 0; }); filter.q = ""; filter.type = ""; filter.tier = ""; filter.sprite = ""; rebuild(); } } }, "Clear"),
 	);
-	card.appendChild(toolbar);
+	wrap.appendChild(toolbar);
 	const grid = el("div", { class: "mon-grid" });
-	card.appendChild(grid);
+	wrap.appendChild(grid);
 	grid.appendChild(el("div", { class: "empty" }, "Loading…"));
 	function rebuild() {
 		empty(grid);
-		grid.appendChild(el("div", { class: "mon-card new", on: { click: () => openEditor("species", null) } },
-			el("div", {}, "+  Add another Pokémon")));
+		grid.appendChild(el("div", { class: "mon-card new", on: { click: () => openSpeciesEditor(null) } },
+			icon("plus", 16), "Add a Pokémon"));
 		const q = filter.q.toLowerCase().trim();
 		const items = all.filter((it) => {
 			const d = it.data;
@@ -919,14 +1098,13 @@ function renderSpeciesList() {
 		for (const it of items) grid.appendChild(monCard(it));
 		if (all.length === 0) {
 			grid.appendChild(el("div", { class: "empty", style: { gridColumn: "1 / -1" } },
-				el("div", { class: "big" }, "✨"),
-				el("div", {}, "Your Pokédex is empty. Click "), el("strong", {}, "+  Add another Pokémon"), el("div", {}, " to start."),
+				el("div", { class: "big" }, icon("mon", 34)),
+				el("div", {}, "Your Pokédex is empty. Create your first custom Pokémon to get started."),
 			));
 		} else if (items.length === 0) {
 			grid.appendChild(el("div", { class: "empty", style: { gridColumn: "1 / -1" } }, "No Pokémon match those filters."));
 		}
 	}
-	// Load both species and sprite-status so the "Missing sprite" filter works.
 	Promise.all([
 		api("GET", "/api/species"),
 		api("GET", "/api/sprites").catch(() => ({ items: [] })),
@@ -934,7 +1112,7 @@ function renderSpeciesList() {
 		const spriteMap = {};
 		for (const s of (spritesR.items || [])) spriteMap[s.id] = !!s.hasSprite;
 		all = (sr.items || []).map((it) => ({ ...it, _hasSprite: !!spriteMap[it.id] }));
-		state.customSpecies = sr.items || []; // refresh the global cache too
+		state.customSpecies = sr.items || [];
 		rebuild();
 	}).catch((err) => {
 		empty(grid);
@@ -947,14 +1125,14 @@ function monCard(it) {
 	const bst = STATS.reduce((s, k) => s + (d.baseStats[k] || 0), 0);
 	const spriteBox = el("div", { class: "sprite-box" });
 	if (it._hasSprite !== false) {
-		// Cache-buster by id+name change so we refresh after rename or upload
 		const spriteImg = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(it.id) + "/sprite/preview?ts=" + Date.now()) });
-		spriteImg.onerror = () => { spriteImg.style.display = "none"; spriteBox.appendChild(el("div", { style: { fontSize: "2.5rem", opacity: ".3" } }, "✨")); };
+		spriteImg.onerror = () => { spriteImg.style.display = "none"; spriteBox.appendChild(el("span", { style: { color: "var(--faint)" } }, icon("mon", 30))); };
 		spriteBox.appendChild(spriteImg);
 	} else {
-		spriteBox.appendChild(el("div", { style: { fontSize: "2.5rem", opacity: ".3" } }, "✨"));
+		spriteBox.appendChild(el("span", { style: { color: "var(--faint)" } }, icon("mon", 30)));
 	}
-	return el("div", { class: "mon-card", on: { click: () => openEditor("species", it) } },
+	return el("div", { class: "mon-card", on: { click: () => openSpeciesEditor(it) } },
+		it._hasSprite === false ? el("span", { class: "pill warn nosprite-flag", title: "No sprite uploaded yet" }, "no sprite") : null,
 		spriteBox,
 		el("div", { class: "name" }, d.name),
 		el("div", { class: "types" }, d.types.map(typeChip)),
@@ -962,9 +1140,9 @@ function monCard(it) {
 			el("span", {}, "BST " + bst),
 			el("span", {}, d.tier || "—"),
 		),
-		el("div", { style: { display: "flex", gap: ".25rem", marginTop: ".5rem", justifyContent: "center" } },
-			el("button", { class: "ghost", title: "Duplicate", on: { click: (e) => { e.stopPropagation(); duplicateSpecies(it); } } }, "📄"),
-			el("button", { class: "ghost", title: "Delete", on: { click: (e) => { e.stopPropagation(); confirmDelete("species", it); } } }, "🗑"),
+		el("div", { class: "quick" },
+			el("button", { class: "btn btn-ghost btn-icon", title: "Duplicate", on: { click: (e) => { e.stopPropagation(); duplicateSpecies(it); } } }, icon("copy", 14)),
+			el("button", { class: "btn btn-danger btn-icon", title: "Delete", on: { click: (e) => { e.stopPropagation(); confirmDelete("species", it); } } }, icon("trash", 14)),
 		),
 	);
 }
@@ -973,254 +1151,226 @@ function duplicateSpecies(it) {
 	clone.name = (clone.name || "Mon") + " Copy";
 	clone.id = "";
 	clone.num = (Number(clone.num) || 10000) + 1;
-	openEditor("species", { id: "", _rev: null, data: clone });
+	openSpeciesEditor({ id: "", _rev: null, data: clone });
 }
 
-// ─── Editor (used for all entity types) ──────────────────────────────────────
-function openEditor(type, existing) { return openEditorOnTab(type, existing, null); }
-function openEditorOnTab(type, existing, initialTab) {
-	// Duplicate flow passes { id: "", _rev: null, data: {...} } — treat that as a
-	// "new entity prefilled with these fields" rather than an existing record.
+// ─── Unified Pokémon editor (full page) ──────────────────────────────────────
+// One page with everything: basics, stats, abilities, moves (the learnset,
+// merged in — no separate Learnsets screen), sprite, extras.
+
+function moveIdOf(name) { return String(name).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function moveNameOf(id) {
+	const norm = moveIdOf(id);
+	for (const m of state.customMoves || []) { if (m.data && moveIdOf(m.data.id) === norm) return m.data.name; }
+	for (const m of state.psMoves || []) { if (m.id === norm) return m.name; }
+	return id;
+}
+
+function openSpeciesEditor(existing) {
+	// Duplicate flow passes { id: "", _rev: null, data: {...} } — treat as new w/ prefill.
 	const looksLikeNewWithPrefill = existing && (!existing.id || !existing._rev) && existing.data;
 	let prefill = null;
-	if (looksLikeNewWithPrefill) {
-		prefill = deepClone(existing.data);
-		existing = null;
-	}
-	const data = existing ? deepClone(existing.data) : (prefill || defaultEntity(type));
-	const rev = existing ? existing._rev : null;
-	// Per-type tab config. If a type isn't here, it uses the legacy single-form layout.
-	const TAB_CONFIG = {
-		species: [
-			["basics", "Basics", renderSpeciesBasics],
-			["stats", "Stats", renderSpeciesStats],
-			["abilities", "Abilities", renderSpeciesAbilities],
-			["sprite", "Sprite", renderSpeciesSprite],
-			["extra", "Extras", renderSpeciesExtra],
-		],
-		// formats now use the Card-Stack editor (renderFormatEditor) — dispatched from renderForm
-	};
-	const tabsFor = TAB_CONFIG[type];
-	let activeTab = tabsFor ? (initialTab && tabsFor.some((t) => t[0] === initialTab) ? initialTab : tabsFor[0][0]) : null;
-	const overlay = el("div", { class: "modal-overlay" });
-	let isClosed = false;
-	function close() {
-		if (isClosed) return;
-		isClosed = true;
-		if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-		document.removeEventListener("keydown", onKey);
-	}
-	function onKey(e) {
-		if (e.key === "Escape") {
-			e.stopPropagation();
-			close();
-			return;
-		}
-		if (e.key === "Tab") {
-			const focusable = overlay.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
-			if (focusable.length === 0) return;
-			const first = focusable[0];
-			const last = focusable[focusable.length - 1];
-			if (e.shiftKey) {
-				if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-			} else {
-				if (document.activeElement === last) { e.preventDefault(); first.focus(); }
-			}
-		}
-	}
-	document.addEventListener("keydown", onKey);
-	overlay.addEventListener("click", (e) => {
-		// Click on the dimmed background (not the modal) closes the editor.
-		if (e.target === overlay) close();
+	if (looksLikeNewWithPrefill) { prefill = deepClone(existing.data); existing = null; }
+	const data = existing ? deepClone(existing.data) : (prefill || {
+		id: "", num: 10001, name: "", types: ["Normal"],
+		baseStats: { hp: 80, atk: 80, def: 80, spa: 80, spd: 80, spe: 80 },
+		abilities: { "0": "" }, heightm: 1, weightkg: 10, color: "Pink",
+		eggGroups: ["Field"], tier: "OU", doublesTier: "DOU",
 	});
-	function bodyForTab() {
-		if (!tabsFor) return renderForm(type, data);
-		const tab = tabsFor.find((t) => t[0] === activeTab);
-		return tab ? tab[2](data) : el("div", {});
+	// Learnset: merged into this editor. Load the existing entry if any.
+	let lsItem = null;
+	if (existing) {
+		lsItem = (state.customLearnsets || []).find((l) => l.data && l.data.species === existing.id) || null;
 	}
+	data._learnsetMoves = lsItem ? lsItem.data.moves.map(moveNameOf) : [];
+	state.editor = {
+		type: "species",
+		data,
+		rev: existing ? existing._rev : null,
+		existingId: existing ? existing.id : null,
+		learnsetItem: lsItem ? { id: lsItem.id, rev: lsItem._rev } : null,
+		snapshot: JSON.stringify(data),
+	};
+	render();
+	window.scrollTo(0, 0);
+}
+
+function closeEditor(force) {
+	const ed = state.editor;
+	if (!ed) return;
+	if (!force && JSON.stringify(ed.data) !== ed.snapshot) {
+		if (!confirm("Discard unsaved changes?")) return;
+	}
+	state.editor = null;
+	render();
+}
+
+function renderSpeciesEditorPage() {
+	const ed = state.editor;
+	const d = ed.data;
+	const isNew = !ed.existingId;
+	const wrap = el("div", {});
 	const errSlot = el("div", {});
-	const bodySlot = el("div", { class: "modal-body" });
-	function rebuildBody() {
-		empty(bodySlot);
-		if (tabsFor) {
-			const tabsBar = el("div", { class: "tabs" });
-			for (const [id, label] of tabsFor) tabsBar.appendChild(tabBtn(id, label));
-			bodySlot.appendChild(tabsBar);
+
+	const titleEl = el("h1", {}, isNew ? "New Pokémon" : (d.name || ed.existingId));
+	const head = el("div", { class: "editor-head" },
+		el("button", { class: "btn btn-quiet back", on: { click: () => closeEditor(false) } }, icon("back", 14), "Pokémon"),
+		titleEl,
+		!isNew ? el("button", { class: "btn btn-danger", on: { click: () => confirmDelete("species", { id: ed.existingId, data: d }, () => { state.editor = null; render(); }) } }, icon("trash", 14), "Delete") : null,
+		el("button", { class: "btn", on: { click: () => saveSpecies({}) } }, "Save"),
+		el("button", { class: "btn btn-primary", on: { click: () => saveSpecies({ thenBuild: true }) } }, icon("rocket", 14), state.hosted ? "Save & publish" : "Save & deploy"),
+	);
+	wrap.appendChild(head);
+	wrap.appendChild(errSlot);
+
+	const SECTIONS = [
+		["basics", "Basics", secSpeciesBasics],
+		["stats", "Stats", secSpeciesStats],
+		["abilities", "Abilities", secSpeciesAbilities],
+		["moves", "Moves", secSpeciesMoves],
+		["sprite", "Sprite", secSpeciesSprite],
+		["extras", "Extras", secSpeciesExtras],
+	];
+	const toc = el("div", { class: "editor-toc" });
+	const secHost = el("div", { class: "editor-sections" });
+	const secEls = {};
+	for (const [id, label, renderFn] of SECTIONS) {
+		const sec = el("section", { class: "esec", id: "sec-" + id });
+		sec.appendChild(el("h2", {}, label));
+		sec.appendChild(renderFn(d, { titleEl }));
+		secHost.appendChild(sec);
+		secEls[id] = sec;
+		toc.appendChild(el("a", { href: "javascript:void 0", "data-sec": id, class: id === "basics" ? "active" : "", on: { click: () => {
+			sec.scrollIntoView({ behavior: "smooth", block: "start" });
+		} } }, label));
+	}
+	// Scroll-spy for the TOC
+	const spy = () => {
+		let active = SECTIONS[0][0];
+		for (const [id] of SECTIONS) {
+			const r = secEls[id].getBoundingClientRect();
+			if (r.top <= 130) active = id;
 		}
-		bodySlot.appendChild(errSlot);
-		bodySlot.appendChild(bodyForTab());
-	}
-	function tabBtn(id, label) {
-		return el("button", { class: activeTab === id ? "active" : "", on: { click: () => { activeTab = id; rebuildBody(); } } }, label);
-	}
-	function highlightFieldError(errorText) {
-		bodySlot.querySelectorAll(".field.is-invalid").forEach((el) => el.classList.remove("is-invalid"));
-		const key = errorText.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-		if (!key) return false;
-		const candidates = bodySlot.querySelectorAll('[data-field="' + key + '"], [name="' + key + '"]');
-		for (const el of candidates) {
-			const field = el.closest(".field");
-			if (field) { field.classList.add("is-invalid"); field.scrollIntoView({ behavior: "smooth", block: "center" }); return true; }
-		}
-		return false;
-	}
-	async function save(opts) {
+		for (const a of toc.children) a.classList.toggle("active", a.dataset.sec === active);
+	};
+	window.addEventListener("scroll", spy, { passive: true });
+
+	wrap.appendChild(el("div", { class: "editor-layout" }, toc, secHost));
+
+	async function saveSpecies(opts) {
 		empty(errSlot);
-		bodySlot.querySelectorAll(".field.is-invalid").forEach((el) => el.classList.remove("is-invalid"));
+		secHost.querySelectorAll(".field.is-invalid").forEach((n) => n.classList.remove("is-invalid"));
+		const body = deepClone(d);
+		const stagedSprite = body._stagedSprite;
+		const learnsetNames = body._learnsetMoves || [];
+		delete body._stagedSprite;
+		delete body._learnsetMoves;
 		try {
-			const stagedSprite = data._stagedSprite;
-			if (stagedSprite) delete data._stagedSprite;
-			const url = "/api/" + type + (existing ? "/" + existing.id : "");
-			const method = existing ? "PUT" : "POST";
-			const body = data;
-			if (existing && rev) body.__rev = rev;
+			const url = "/api/species" + (ed.existingId ? "/" + encodeURIComponent(ed.existingId) : "");
+			const method = ed.existingId ? "PUT" : "POST";
+			if (ed.existingId && ed.rev) body.__rev = ed.rev;
 			const headers = { "X-Pinkacord-Admin": "1", "Content-Type": "application/json" };
-			if (existing && rev) headers["If-Match"] = rev;
+			if (ed.existingId && ed.rev) headers["If-Match"] = ed.rev;
 			const r = await fetch(adminApiPath(url), { method, headers, credentials: "same-origin", body: JSON.stringify(body) });
 			const json = await r.json().catch(() => ({ ok: false, message: "bad response" }));
 			if (!r.ok || !json.ok) {
-				if (stagedSprite) data._stagedSprite = stagedSprite;
-				errSlot.appendChild(el("div", { class: "banner error" },
-					json.message || r.statusText));
-				if (json.fieldErrors) {
-					for (const fe of json.fieldErrors) {
-						errSlot.appendChild(el("div", { class: "field-error" }, "• " + fe));
-						highlightFieldError(fe);
-					}
-				}
+				errSlot.appendChild(el("div", { class: "banner error" }, json.message || r.statusText));
+				if (json.fieldErrors) for (const fe of json.fieldErrors) errSlot.appendChild(el("div", { class: "field-error" }, "• " + fe));
+				window.scrollTo({ top: 0, behavior: "smooth" });
 				return false;
 			}
-			// Upload staged sprite now that the species exists.
-			if (stagedSprite && type === "species") {
-				try {
-					await api("POST", "/api/species/" + encodeURIComponent(data.id) + "/sprite", { data: stagedSprite });
-				} catch (err) {
-					setToast("error", "Saved species but sprite upload failed: " + (err.message || "unknown"));
+			const savedId = (json.item && json.item.id) || body.id || moveIdOf(body.name);
+			// 1) staged sprite
+			if (stagedSprite) {
+				try { await api("POST", "/api/species/" + encodeURIComponent(savedId) + "/sprite", { data: stagedSprite }); }
+				catch (err) { setToast("error", "Saved, but sprite upload failed: " + (err.message || "unknown")); }
+			}
+			// 2) learnset upsert/delete (moves stored as lowercase ids)
+			const moveIds = [];
+			for (const n of learnsetNames) { const id = moveIdOf(n); if (id && !moveIds.includes(id)) moveIds.push(id); }
+			try {
+				if (moveIds.length) {
+					if (ed.learnsetItem) {
+						await api("PUT", "/api/learnsets/" + encodeURIComponent(ed.learnsetItem.id), { species: savedId, moves: moveIds, __rev: ed.learnsetItem.rev });
+					} else {
+						await api("POST", "/api/learnsets", { species: savedId, moves: moveIds });
+					}
+				} else if (ed.learnsetItem) {
+					await api("DELETE", "/api/learnsets/" + encodeURIComponent(ed.learnsetItem.id));
 				}
+			} catch (err) {
+				setToast("error", "Saved the Pokémon, but its move list failed to save: " + (err.message || "unknown"), 9000);
 			}
-			// Refresh caches so dropdowns / search reflect the new state immediately.
-			if (type === "species") {
-				try { const c = await api("GET", "/api/species"); state.customSpecies = c.items || []; } catch {}
-			} else if (type === "abilities") {
-				try { const ca = await api("GET", "/api/abilities"); state.customAbilities = ca.items || []; } catch {}
-			} else if (type === "moves") {
-				try { const cm = await api("GET", "/api/moves"); state.customMoves = cm.items || []; } catch {}
-			} else if (type === "items") {
-				try { const ci = await api("GET", "/api/items"); state.customItems = ci.items || []; } catch {}
-			} else if (type === "learnsets") {
-				try { const cl = await api("GET", "/api/learnsets"); state.customLearnsets = cl.items || []; } catch {}
-			} else if (type === "formats") {
-				try { const cf = await api("GET", "/api/formats"); state.customFormats = cf.items || []; } catch {}
-			}
+			await refreshEntityCache("species");
+			await refreshEntityCache("learnsets");
 			markPendingChange();
-			if (opts && opts.thenBuild) {
-				close();
-				render();
-				await doBuildAndApply();
-				return true;
-			}
-			close();
-			setToast("success", "Saved " + (data.name || data.id) + ". Click " + (state.hosted ? "Publish" : "⚡ Apply") + " to make it live.");
+			state.editor = null;
 			render();
+			if (opts && opts.thenBuild) { await doBuildAndApply(); return true; }
+			setToast("success", "Saved " + (d.name || savedId) + ". Hit Deploy when you're ready to push it live.");
 			return true;
-		} catch (err) { errSlot.appendChild(el("div", { class: "banner error" }, err.message)); return false; }
-	}
-	const modal = el("div", { class: "modal" },
-		el("div", { class: "modal-head" },
-			el("h2", {}, (existing ? "Edit " : "New ") + entityTitle(type)),
-			el("button", { class: "x", on: { click: close } }, "×"),
-		),
-		bodySlot,
-		el("div", { class: "modal-foot" },
-			el("div", { style: { fontSize: ".8rem", color: "#888" } }, existing ? "Editing • saved → not yet live" : "Will be added when you save"),
-			el("div", {},
-				el("button", { class: "secondary", on: { click: close } }, "Cancel"),
-				" ",
-				el("button", { class: "secondary", on: { click: () => save() } }, "💾 Save"),
-				" ",
-				el("button", { class: "primary", on: { click: () => save({ thenBuild: true }) } }, state.hosted ? "Save & Publish" : "⚡ Save & Apply"),
-			),
-		),
-	);
-	overlay.appendChild(modal);
-	rebuildBody();
-	document.body.appendChild(overlay);
-}
-function entityTitle(type) {
-	const t = { species: "Pokémon", moves: "Move", abilities: "Ability", items: "Item", learnsets: "Learnset", formats: "Format" };
-	return t[type] || type;
-}
-
-// ─── Default-entity factories ────────────────────────────────────────────────
-function defaultEntity(type) {
-	if (type === "species") return { id: "", num: 10001, name: "", types: ["Normal"], baseStats: { hp: 80, atk: 80, def: 80, spa: 80, spd: 80, spe: 80 }, abilities: { "0": "" }, heightm: 1, weightkg: 10, color: "Pink", eggGroups: ["Field"], tier: "OU", doublesTier: "DOU" };
-	if (type === "moves") return { id: "", num: 9001, name: "", type: "Normal", category: "Special", basePower: 80, accuracy: 100, pp: 15, priority: 0, target: "normal", shortDesc: "", flags: {} };
-	if (type === "abilities") return { id: "", name: "", shortDesc: "", effects: [] };
-	if (type === "items") return { id: "", num: 9001, name: "", shortDesc: "", effects: [] };
-	if (type === "learnsets") return { species: "", moves: [] };
-	if (type === "formats") return { id: "", name: "[Pinkacord] ", mod: "pinkacord", section: "Pinkacord", column: 1, desc: "", gameType: "singles", ruleset: ["Standard"], banlist: [], unbanlist: [], sharedPower: false, enabled: true };
-	return {};
-}
-
-// ─── Species editor: Basics tab ──────────────────────────────────────────────
-function renderSpeciesBasics(d) {
-	function autoId() {
-		if (!d.id && d.name) d.id = d.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		const idEl = $(".js-species-id"); if (idEl) idEl.value = d.id || "";
-	}
-	const namePart = field("Name", textInput(d, "name", { placeholder: "Pinkachu", onChange: autoId }),
-		"The public name shown in the teambuilder, lobby, and battle.");
-	const idInput = el("input", { type: "text", class: "js-species-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } });
-	const idPart = field("ID", idInput, "Lowercase, no spaces. Used internally. Auto-generated from name.", "This is used in URLs and battle imports — it's like a username for the Pokémon.");
-	const numPart = field("Pokédex number", textInput(d, "num", { type: "number" }), "Must be ≥ 10001 to avoid clashing with existing Pokémon.", "Internal number used by the game engine. Any unused number works.");
-
-	const t1Host = el("div", { class: "type-pick" });
-	for (const t of TYPES) {
-		const sel = d.types[0] === t;
-		t1Host.appendChild(el("button", { type: "button", class: sel ? "selected" : "", style: { background: TYPE_COLORS[t] }, on: { click: () => { d.types[0] = t; rebuildTypes(); } } }, t));
-	}
-	const t2Host = el("div", { class: "type-pick" });
-	function paintType2() {
-		empty(t2Host);
-		t2Host.appendChild(el("button", { type: "button", class: !d.types[1] ? "selected-2" : "", style: { background: "#aaa" }, on: { click: () => { d.types = [d.types[0]]; rebuildTypes(); } } }, "none"));
-		for (const t of TYPES) {
-			if (t === d.types[0]) continue;
-			const sel = d.types[1] === t;
-			t2Host.appendChild(el("button", { type: "button", class: sel ? "selected-2" : "", style: { background: TYPE_COLORS[t] }, on: { click: () => { d.types[1] = t; rebuildTypes(); } } }, t));
+		} catch (err) {
+			errSlot.appendChild(el("div", { class: "banner error" }, err.message || String(err)));
+			window.scrollTo({ top: 0, behavior: "smooth" });
+			return false;
 		}
 	}
-	function rebuildTypes() {
+
+	return wrap;
+}
+
+// — Section: Basics —
+function secSpeciesBasics(d, ctx) {
+	const idDisplay = el("code", {}, d.id || "(auto from name)");
+	const namePart = field("Name", textInput(d, "name", { placeholder: "Pinkachu", onChange: () => {
+		d.id = moveIdOf(d.name);
+		idDisplay.textContent = d.id || "(auto from name)";
+		if (ctx && ctx.titleEl) ctx.titleEl.textContent = d.name || "New Pokémon";
+	} }), "The public name shown in the teambuilder, lobby, and battle.");
+	const numPart = field("Pokédex number", textInput(d, "num", { type: "number" }), "Any unused number ≥ 10001 works.");
+
+	const t1Host = el("div", { class: "type-pick" });
+	const t2Host = el("div", { class: "type-pick" });
+	function paintType1() {
 		empty(t1Host);
 		for (const t of TYPES) {
 			const sel = d.types[0] === t;
-			t1Host.appendChild(el("button", { type: "button", class: sel ? "selected" : "", style: { background: TYPE_COLORS[t] }, on: { click: () => { d.types[0] = t; if (d.types[1] === t) d.types = [t]; rebuildTypes(); } } }, t));
+			t1Host.appendChild(el("button", { type: "button", class: sel ? "selected" : "", style: { background: TYPE_COLORS[t] }, on: { click: () => { d.types[0] = t; if (d.types[1] === t) d.types = [t]; paintType1(); paintType2(); } } }, t));
 		}
-		paintType2();
 	}
-	paintType2();
+	function paintType2() {
+		empty(t2Host);
+		t2Host.appendChild(el("button", { type: "button", class: !d.types[1] ? "selected-2" : "", style: { background: "#5d6678" }, on: { click: () => { d.types = [d.types[0]]; paintType2(); } } }, "none"));
+		for (const t of TYPES) {
+			if (t === d.types[0]) continue;
+			const sel = d.types[1] === t;
+			t2Host.appendChild(el("button", { type: "button", class: sel ? "selected-2" : "", style: { background: TYPE_COLORS[t] }, on: { click: () => { d.types[1] = t; paintType2(); } } }, t));
+		}
+	}
+	paintType1(); paintType2();
 	return el("div", {},
-		el("div", { class: "grid-2" }, namePart, idPart),
-		numPart,
+		el("div", { class: "grid-2" }, namePart, numPart),
+		el("div", { class: "field" }, el("label", {}, "Internal ID"), el("div", { style: { fontSize: "13px", color: "var(--dim)" } }, idDisplay), el("div", { class: "hint" }, "Generated from the name — used in URLs and team imports.")),
 		field("Primary type", t1Host, "Determines STAB, weaknesses, and resistances."),
 		field("Secondary type", t2Host, "Pick \"none\" for a single-type Pokémon."),
 	);
 }
 
-// ─── Species editor: Stats tab ───────────────────────────────────────────────
-function renderSpeciesStats(d) {
+// — Section: Stats —
+function secSpeciesStats(d) {
 	function bst() { return STATS.reduce((s, k) => s + (d.baseStats[k] || 0), 0); }
 	const bstEl = el("span", { class: "bst-num" }, String(bst()));
 	const bstTagEl = el("span", { class: "bst-tag" }, "");
 	function updateBst() {
 		const total = bst();
 		bstEl.textContent = String(total);
-		let tag = "frail";
-		if (total >= 720) tag = "🚨 legendary tier — likely banned in most formats";
-		else if (total >= 600) tag = "🌟 pseudo-legendary tier";
-		else if (total >= 525) tag = "💪 strong (OU territory)";
-		else if (total >= 450) tag = "👍 solid (UU / RU territory)";
-		else if (total >= 350) tag = "🌱 modest";
-		else tag = "🍃 frail";
+		let tag;
+		if (total >= 720) tag = "Legendary tier — likely banned in most formats";
+		else if (total >= 600) tag = "Pseudo-legendary tier";
+		else if (total >= 525) tag = "Strong (OU territory)";
+		else if (total >= 450) tag = "Solid (UU / RU territory)";
+		else if (total >= 350) tag = "Modest";
+		else tag = "Frail";
 		bstTagEl.textContent = tag;
 	}
 	updateBst();
@@ -1251,18 +1401,16 @@ function renderSpeciesStats(d) {
 		);
 	});
 	return el("div", {},
-		field("Base stats", el("div", {}, rows), "Drag each slider. Green = strong, orange = average, red = weak. Total ≤ 720 is standard."),
+		el("div", {}, rows),
 		el("div", { class: "bst-display" },
-			el("div", {}, el("div", { style: { fontSize: ".8rem", color: "#888" } }, "Total stats (BST)"), bstEl),
+			el("div", {}, el("div", { style: { fontSize: "11px", color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 600 } }, "Base stat total"), bstEl),
 			bstTagEl,
 		),
 	);
 }
 
-// ─── Species editor: Abilities tab ───────────────────────────────────────────
-function renderSpeciesAbilities(d) {
-	// Build a single shared datalist for all three ability slots — autocomplete
-	// over the full PS ability dex + any custom abilities the admin defined.
+// — Section: Abilities —
+function secSpeciesAbilities(d) {
 	const datalistId = "ps-abilities-datalist";
 	function knownNames() {
 		const out = new Set();
@@ -1272,17 +1420,16 @@ function renderSpeciesAbilities(d) {
 		}
 		return Array.from(out).sort();
 	}
-	function rebuildDatalist() {
+	(function rebuildDatalist() {
 		const existing = document.getElementById(datalistId);
 		if (existing) existing.remove();
 		const dl = el("datalist", { id: datalistId });
 		for (const name of knownNames()) dl.appendChild(el("option", { value: name }));
 		document.body.appendChild(dl);
-	}
-	rebuildDatalist();
+	})();
 	function isKnown(name) {
-		const id = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		return knownNames().some((n) => n.toLowerCase().replace(/[^a-z0-9]/g, "") === id);
+		const id = moveIdOf(name);
+		return knownNames().some((n) => moveIdOf(n) === id);
 	}
 	function ability(slotKey, label, hint) {
 		const input = el("input", { type: "text", list: datalistId, value: d.abilities[slotKey] || "", placeholder: "Start typing — e.g. Static, Levitate, Regenerator", on: { input: (e) => {
@@ -1294,12 +1441,9 @@ function renderSpeciesAbilities(d) {
 		const warn = el("div", { class: "field-error", style: { display: "none" } });
 		function validate() {
 			const v = d.abilities[slotKey];
-			if (!v) { warn.style.display = "none"; return; }
-			if (isKnown(v)) { warn.style.display = "none"; }
-			else {
-				warn.textContent = "⚠ \"" + v + "\" isn't a known ability. Create it under 🔮 Abilities first, or pick from the dropdown.";
-				warn.style.display = "block";
-			}
+			if (!v || isKnown(v)) { warn.style.display = "none"; return; }
+			warn.textContent = "\"" + v + "\" isn't a known ability. Create it under Abilities first, or pick from the dropdown.";
+			warn.style.display = "block";
 		}
 		validate();
 		return el("div", { class: "field" },
@@ -1310,535 +1454,58 @@ function renderSpeciesAbilities(d) {
 		);
 	}
 	return el("div", {},
-		el("p", { style: { color: "#666", fontSize: ".9rem", lineHeight: "1.5", marginBottom: "1rem" } },
-			"Type any PS or custom ability — autocomplete will help. To invent a new one, open ", el("strong", {}, "🔮 Abilities"), " and create it first; it will appear here automatically."),
-		ability("0", "First ability (most common)", "What most Pokémon of this species will have."),
-		ability("1", "Second ability (alternate)", "Optional — some are born with this instead."),
-		ability("H", "Hidden ability (rare)", "Optional — rare ability from special encounters."),
-		ability("S", "Special ability", "Optional — event or special form ability."),
-	);
-}
-
-// ─── Species editor: Sprite tab ──────────────────────────────────────────────
-function renderSpeciesSprite(d) {
-	const wrap = el("div", {});
-	const box = el("div", { class: "sprite-uploader" });
-
-	function refresh() {
-		empty(box);
-		const previewBox = el("div", { class: "preview-box" });
-		// If a staged base64 is present, show that. Otherwise hit the API.
-		if (d._stagedSprite) {
-			previewBox.appendChild(el("img", { src: "data:image/png;base64," + d._stagedSprite }));
-		} else if (d.id) {
-			const img = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(d.id) + "/sprite/preview?ts=" + Date.now()) });
-			img.onerror = () => { img.style.display = "none"; previewBox.appendChild(el("div", { style: { fontSize: "2rem", opacity: ".3" } }, "✨")); };
-			previewBox.appendChild(img);
-		} else {
-			previewBox.appendChild(el("div", { style: { fontSize: "2rem", opacity: ".3" } }, "✨"));
-		}
-		box.appendChild(el("div", { class: "preview" },
-			previewBox,
-			el("div", { class: "preview-info" },
-				el("strong", {}, "Sprite preview"),
-				el("div", {}, "Recommended: 96 × 96 pixel PNG, ≤ 250 KB."),
-				d._stagedSprite ? el("div", { style: { color: "#a02020", fontWeight: 700, marginTop: ".25rem" } }, "⏳ Staged — will upload when you Save.") : null,
-				d.id ? el("div", { style: { color: "#6a5a7a", fontSize: "8.5pt", marginTop: ".25rem" } }, "Saved at ", el("code", {}, "/sprites/pinkacord/" + d.id + ".png"), ".") : null,
-			),
-		));
-		const fileInput = el("input", { type: "file", accept: "image/png,image/gif", on: { change: async (e) => {
-			const file = e.target.files[0];
-			if (!file) return;
-			if (file.size > 250 * 1024) { setToast("error", "Sprite too large: " + (file.size / 1024).toFixed(0) + " KB (max 250 KB)"); return; }
-			const reader = new FileReader();
-			reader.onload = async () => {
-				const dataUrl = reader.result;
-				const base64 = String(dataUrl).split(",")[1];
-				// If species not saved yet (no ID committed server-side), stage in memory.
-				if (!d.id) {
-					d._stagedSprite = base64;
-					setToast("info", "Sprite staged. It'll upload when you click Save.");
-					refresh();
-					return;
-				}
-				try {
-					await api("POST", "/api/species/" + encodeURIComponent(d.id) + "/sprite", { data: base64 });
-					markPendingChange();
-					setToast("success", "Sprite uploaded. Click " + (state.hosted ? "Publish" : "⚡ Apply") + " to deploy it.");
-					refresh();
-					render();
-				} catch (err) { setToast("error", "Upload failed: " + (err.message || "unknown")); }
-			};
-			reader.readAsDataURL(file);
-		} } });
-		box.appendChild(fileInput);
-		const btnRow = el("div", { style: { marginTop: ".5rem", display: "flex", gap: ".4rem" } });
-		if (d._stagedSprite) {
-			btnRow.appendChild(el("button", { class: "secondary", on: { click: () => { delete d._stagedSprite; refresh(); } } }, "Clear staged sprite"));
-		}
-		if (d.id) {
-			btnRow.appendChild(el("button", { class: "danger", on: { click: async () => {
-				if (!confirm("Remove sprite for " + d.id + "?")) return;
-				try {
-					await api("DELETE", "/api/species/" + encodeURIComponent(d.id) + "/sprite");
-					markPendingChange();
-					setToast("success", "Sprite removed.");
-					refresh(); render();
-				} catch (err) { setToast("error", "Delete failed: " + (err.message || "unknown")); }
-			} } }, "Remove sprite"));
-		}
-		box.appendChild(btnRow);
-	}
-	refresh();
-	wrap.appendChild(box);
-	return wrap;
-}
-
-// ─── Species editor: Extras tab ──────────────────────────────────────────────
-function renderSpeciesExtra(d) {
-	const eggGroups = (idx) => el("select", { on: { change: (e) => { if (e.target.value === "—") d.eggGroups = d.eggGroups.filter((_, i) => i !== idx); else { d.eggGroups[idx] = e.target.value; } } } },
-		el("option", { value: "—" }, "—"),
-		...EGG_GROUPS.map((g) => el("option", { value: g, selected: d.eggGroups[idx] === g }, g)),
-	);
-	return el("div", {},
-		el("div", { class: "grid-3" },
-			field("Height (m)", textInput(d, "heightm", { type: "number" }), "Mostly flavor."),
-			field("Weight (kg)", textInput(d, "weightkg", { type: "number" }), "Used by some moves (Heat Crash, etc)."),
-			field("Color", selectInput(d, "color", COLORS), "Pokédex flavor text."),
-
-			field("Egg group 1", eggGroups(0), null, "Used for breeding compatibility."),
-			field("Egg group 2 (optional)", eggGroups(1), null, "Optional second egg group for cross-breeding."),
-
-			field("Singles tier", selectInput(d, "tier", TIERS), null, "Which competitive bracket this Pokémon is intended for."),
-			field("Doubles tier", selectInput(d, "doublesTier", DOUBLES_TIERS), null, "The doubles-format tier for this Pokémon."),
-		),
-	);
-}
-
-// ─── Generic entity list (moves, abilities, items, formats) ──────────────────
-function renderEntityList(type, label, emoji) {
-	const wrap = el("div", {});
-	wrap.appendChild(el("div", { class: "card compact" },
-		el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-			el("h2", { style: { margin: 0 } }, emoji + "  " + label),
-			el("button", { class: "primary", on: { click: () => openEditor(type, null) } }, "+  New " + entityTitle(type)),
-		),
-	));
-	const card = el("div", { class: "card" });
-	wrap.appendChild(card);
-	const filter = { q: "", extra: "" };
-	let all = [];
-	const searchDebounce = debounce((fn) => fn(), 180);
-	const searchInput = el("input", { type: "text", class: "grow", placeholder: "Search by name or id…", on: { input: (e) => { filter.q = e.target.value; searchDebounce(() => rebuild()); } } });
-	const toolbar = el("div", { class: "list-toolbar" }, searchInput);
-	if (type === "moves") {
-		const typeSel = el("select", { on: { change: (e) => { filter.extra = e.target.value; rebuild(); } } },
-			...[""].concat(TYPES).map((t) => el("option", { value: t }, t || "All types")));
-		toolbar.appendChild(typeSel);
-	} else if (type === "formats") {
-		const modSel = el("select", { on: { change: (e) => { filter.extra = e.target.value; rebuild(); } } },
-			el("option", { value: "" }, "All mods"),
-			...["pinkacord", "gen9", "gen8", "gen7", "gen6", "gen5", "gen4", "gen3", "gen2", "gen1"].map((m) => el("option", { value: m }, m)));
-		toolbar.appendChild(modSel);
-	}
-	toolbar.appendChild(el("button", { class: "ghost", on: { click: () => { searchInput.value = ""; filter.q = ""; filter.extra = ""; const sels = toolbar.querySelectorAll("select"); sels.forEach((s) => s.selectedIndex = 0); rebuild(); } } }, "Clear"));
-	card.appendChild(toolbar);
-	const slot = el("div", {});
-	card.appendChild(slot);
-	function rebuild() {
-		empty(slot);
-		if (all.length === 0) {
-			slot.appendChild(el("div", { class: "empty" },
-				el("div", { class: "big" }, emoji),
-				el("div", {}, "No custom " + label.toLowerCase() + " yet."),
-				el("div", { style: { marginTop: "1rem" } }, el("button", { class: "primary", on: { click: () => openEditor(type, null) } }, "+  Create your first")),
-			));
-			return;
-		}
-		const q = filter.q.toLowerCase().trim();
-		const items = all.filter((it) => {
-			const d = it.data;
-			if (q) {
-				const blob = ((d.name || "") + " " + (d.id || "") + " " + (d.species || "")).toLowerCase();
-				if (blob.indexOf(q) < 0) return false;
-			}
-			if (filter.extra) {
-				if (type === "moves" && d.type !== filter.extra) return false;
-				if (type === "formats" && d.mod !== filter.extra) return false;
-			}
-			return true;
-		});
-		if (items.length === 0) {
-			slot.appendChild(el("div", { class: "empty" }, "No " + label.toLowerCase() + " match those filters."));
-			return;
-		}
-		const list = el("div", { style: { display: "grid", gap: ".5rem" } });
-		for (const it of items) list.appendChild(genericRow(type, it));
-		slot.appendChild(list);
-	}
-	slot.appendChild(el("div", { class: "empty" }, "Loading…"));
-	api("GET", "/api/" + type).then((r) => {
-		all = r.items || [];
-		rebuild();
-	}).catch((err) => {
-		empty(slot);
-		slot.appendChild(el("div", { class: "banner error" }, err.message));
-	});
-	return wrap;
-}
-function genericRow(type, it) {
-	const d = it.data;
-	const summary = type === "moves"
-		? el("div", { style: { display: "flex", gap: ".5rem", alignItems: "center" } }, typeChip(d.type), el("span", { style: { color: "#666" } }, d.category + " • " + d.basePower + " BP • " + d.accuracy + "% acc"))
-		: type === "abilities" ? el("span", { style: { color: "#666", fontSize: ".85rem" } }, d.shortDesc || "—")
-		: type === "items" ? el("span", { style: { color: "#666", fontSize: ".85rem" } }, d.shortDesc || "—")
-		: type === "formats" ? el("span", { style: { color: "#666", fontSize: ".85rem" } }, "mod: " + d.mod + (d.team ? " · " + d.team : "") + (d.sharedPower ? " · Shared Power" : "") + (d.enabled === false ? " · (hidden)" : ""))
-		: type === "learnsets" ? el("span", { style: { color: "#666", fontSize: ".85rem" } }, (d.moves || []).length + " moves")
-		: null;
-	return el("div", { style: { padding: ".75rem 1rem", background: "#faf6ff", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", border: "1px solid #e8dff0" }, on: { click: () => openEditor(type, it) } },
-		el("div", {}, el("div", { style: { fontWeight: 600, color: "#3a2a4a" } }, d.name || d.id || d.species), summary),
-		el("div", { class: "row-actions" },
-			el("button", { class: "secondary", on: { click: (e) => { e.stopPropagation(); openEditor(type, it); } } }, "Edit"),
-			el("button", { class: "ghost", title: "Duplicate", on: { click: (e) => { e.stopPropagation(); duplicateEntity(type, it); } } }, "📄"),
-			el("button", { class: "danger", on: { click: (e) => { e.stopPropagation(); confirmDelete(type, it); } } }, "Delete"),
-		),
-	);
-}
-function duplicateEntity(type, it) {
-	const clone = deepClone(it.data);
-	if (type === "learnsets") {
-		clone.species = "";
-	} else {
-		clone.name = (clone.name || "New") + " Copy";
-		clone.id = "";
-		if (typeof clone.num === "number") clone.num = clone.num + 1;
-	}
-	openEditor(type, { id: "", _rev: null, data: clone });
-}
-
-// ─── Generic forms (moves, abilities, items, formats, learnsets) ────────────
-function renderForm(type, d) {
-	if (type === "moves") return renderMoveForm(d);
-	if (type === "abilities") return renderAbilityForm(d);
-	if (type === "items") return renderItemForm(d);
-	if (type === "learnsets") return renderLearnsetForm(d);
-	if (type === "formats") return renderFormatEditor(d);
-	return el("div", {}, "Unknown entity type");
-}
-
-function accuracyControl(d) {
-	const isAlwaysHit = d.accuracy === true;
-	const numInput = el("input", { type: "number", value: isAlwaysHit ? "" : (d.accuracy ?? 100), min: 1, max: 100, disabled: isAlwaysHit, on: { input: (e) => { d.accuracy = Number(e.target.value); } } });
-	const cb = el("input", { type: "checkbox", checked: isAlwaysHit, style: { width: "auto" }, on: { change: (e) => {
-		if (e.target.checked) { d.accuracy = true; numInput.disabled = true; numInput.value = ""; }
-		else { d.accuracy = 100; numInput.disabled = false; numInput.value = "100"; }
-	} } });
-	return el("div", { style: { display: "flex", gap: ".75rem", alignItems: "center" } },
-		numInput,
-		el("label", { style: { display: "inline-flex", gap: ".3rem", fontWeight: "normal", alignItems: "center", whiteSpace: "nowrap" } }, cb, "Always hits"),
-	);
-}
-function renderMoveForm(d) {
-	d.flags = d.flags || {};
-	const flagChips = ["contact", "protect", "mirror", "sound", "punch", "bite", "slicing", "bullet", "powder", "heal"].map((f) => {
-		const cb = el("input", { type: "checkbox", checked: d.flags[f] === 1, style: { width: "auto" }, on: { change: (e) => { if (e.target.checked) d.flags[f] = 1; else delete d.flags[f]; } } });
-		return el("label", { style: { display: "inline-flex", gap: ".3rem", marginRight: ".75rem", fontWeight: "normal", alignItems: "center" } }, cb, f);
-	});
-	return el("div", {},
+		el("p", { class: "sub" },
+			"Type any standard or custom ability — autocomplete will help. To invent a new one, create it under ",
+			el("a", { href: "#abilities" }, "Abilities"), " and it will appear here automatically."),
 		el("div", { class: "grid-2" },
-			field("Name", textInput(d, "name", { placeholder: "Pink Bolt" }), "The public move name shown in-game."),
-			field("ID", textInput(d, "id"), "Lowercase, no spaces"),
-
-			field("Move number (≥ 9001)", textInput(d, "num", { type: "number" }), "Unique ID. Must be ≥ 9001 to avoid conflicting with standard moves."),
-			field("Type", selectInput(d, "type", TYPES), "Determines STAB and type effectiveness."),
-
-			field("Category", selectInput(d, "category", ["Physical", "Special", "Status"]), "Physical = uses Atk/Def. Special = uses SpA/SpD. Status = no damage."),
-			field("Base power", textInput(d, "basePower", { type: "number" }), "0 for Status moves"),
-			field("Accuracy", accuracyControl(d), "1–100, or check 'Always hits'"),
+			ability("0", "First ability", "What most of this species will have."),
+			ability("1", "Second ability (optional)", "Some are born with this instead."),
+			ability("H", "Hidden ability (optional)", "Rare ability from special encounters."),
+			ability("S", "Special ability (optional)", "Event or special-form ability."),
 		),
-		el("div", { class: "grid-2" },
-			field("PP", textInput(d, "pp", { type: "number" }), "How many times the move can be used. Typical range: 5-40."),
-			field("Priority", textInput(d, "priority", { type: "number" }), "0 is normal. +1 for Quick Attack style."),
-		),
-		field("Short description", textInput(d, "shortDesc"), "Appears in /dt and tooltips. 1-2 sentences."),
-		field("Flags", el("div", {}, flagChips), "What this move can be blocked or boosted by."),
 	);
 }
-function renderAbilityForm(d) {
-	// Auto-id from name if empty.
-	function autoId() {
-		if (!d.id && d.name) d.id = d.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		const idEl = $(".js-ability-id"); if (idEl) idEl.value = d.id || "";
-	}
 
-	const effectsHost = el("div", {});
-	function rebuildEffects() {
-		empty(effectsHost);
-		d.effects = d.effects || [];
-		if (d.effects.length === 0) {
-			effectsHost.appendChild(el("div", { style: { color: "#888", fontSize: ".85rem", fontStyle: "italic", padding: ".5rem 0" } }, "No effects yet. Describe the ability above, or click \"+ Add effect\"."));
-		}
-		d.effects.forEach((ef, idx) => {
-			const kindSel = el("select", { on: { change: (e) => { ef.kind = e.target.value; ef.params = {}; rebuildEffects(); } } },
-				el("option", { value: "" }, "Pick what this ability does…"),
-				...state.effects.map((k) => el("option", { value: k.id, selected: ef.kind === k.id }, k.id + " — " + k.description)),
-			);
-			const paramHost = el("div", { class: "grid-2", style: { marginTop: ".5rem" } });
-			const kindDef = state.effects.find((k) => k.id === ef.kind);
-			if (kindDef && kindDef.paramFields) {
-				for (const fname of kindDef.paramFields) {
-					paramHost.appendChild(field(fname, el("input", { type: "text", value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; const n = Number(v); ef.params[fname] = isNaN(n) || v === "" ? v : n; } } })));
-				}
-			}
-			effectsHost.appendChild(el("div", { style: { background: "#faf6ff", padding: "1rem", borderRadius: "8px", marginBottom: ".5rem" } },
-				el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".5rem" } },
-					el("strong", {}, "Effect " + (idx + 1)),
-					el("button", { class: "danger", on: { click: () => { d.effects.splice(idx, 1); rebuildEffects(); } } }, "Remove"),
-				),
-				kindSel,
-				paramHost,
-			));
-		});
-		effectsHost.appendChild(el("button", { class: "secondary", on: { click: () => { d.effects.push({ kind: "", params: {} }); rebuildEffects(); } } }, "+  Add effect manually"));
-	}
-	rebuildEffects();
-
-	// Natural-language box.
-	const nlText = el("textarea", { rows: 3, placeholder: "Describe ANYTHING — e.g. \"30% chance to paralyze on contact\", \"Switch out when hit for 33% HP\", \"Doubles defense in sand, summons sand on entry\". The AI can invent abilities that don't exist yet.", value: "" });
-	const nlOut = el("div", {});
-	const customCodeHost = el("div", {});
-
-	function renderCustomCode() {
-		empty(customCodeHost);
-		if (!d.customHandlerCode) return;
-		const wrap = el("div", { style: { background: "#2d1b3d", borderRadius: "8px", padding: ".75rem", marginBottom: ".5rem" } });
-		wrap.appendChild(el("div", { style: { color: "#ffd1ee", fontWeight: 600, fontSize: ".85rem", marginBottom: ".4rem", display: "flex", justifyContent: "space-between", alignItems: "center" } },
-			el("span", {}, "⚡ Custom handler code (AI-generated)"),
-			el("button", { class: "ghost", style: { color: "#ffb0d6", fontSize: ".75rem" }, on: { click: () => { d.customHandlerCode = ""; renderCustomCode(); } } }, "Remove"),
-		));
-		const ta = el("textarea", { rows: Math.min(14, Math.max(4, d.customHandlerCode.split("\n").length + 1)), value: d.customHandlerCode, style: { fontFamily: "monospace", fontSize: ".8rem", background: "#1a0e26", color: "#ffd1ee", border: "1px solid #4a2a5a", whiteSpace: "pre" }, on: { input: (e) => { d.customHandlerCode = e.target.value; } } });
-		wrap.appendChild(ta);
-		wrap.appendChild(el("div", { style: { color: "#c8a8d8", fontSize: ".75rem", marginTop: ".4rem" } }, "This code goes verbatim into the generated ability. Review it carefully — the smoke test will catch syntax errors but not logic bugs."));
-		customCodeHost.appendChild(wrap);
-	}
-
-	function renderParseResult(result) {
-		empty(nlOut);
-		if (result.shortDescription) {
-			nlOut.appendChild(el("div", { style: { padding: ".75rem", background: "#e8fce8", border: "1px solid #b8e0b8", borderRadius: "8px", marginBottom: ".5rem" } },
-				el("div", { style: { fontWeight: 600, color: "#1a5c1a", marginBottom: ".25rem", fontSize: ".9rem" } }, "✓ " + (result.approach === "custom" ? "Wrote a custom handler" : result.approach === "mixed" ? "Combined effects + custom code" : "Composed from registry")),
-				el("div", { style: { fontSize: ".85rem", color: "#1a5c1a", marginBottom: ".25rem" } }, result.shortDescription),
-				result.explanation ? el("div", { style: { fontSize: ".8rem", color: "#3a7a3a", fontStyle: "italic" } }, result.explanation) : null,
-			));
-		}
-		if (result.matchedPatterns && result.matchedPatterns.length) {
-			nlOut.appendChild(el("div", { style: { padding: ".75rem", background: "#e8fce8", border: "1px solid #b8e0b8", borderRadius: "8px", marginBottom: ".5rem" } },
-				el("div", { style: { fontWeight: 600, color: "#1a5c1a", marginBottom: ".25rem", fontSize: ".9rem" } }, "✓ Parsed " + result.matchedPatterns.length + " effect(s):"),
-				el("ul", { style: { margin: 0, paddingLeft: "1.25rem", fontSize: ".85rem" } },
-					result.matchedPatterns.map((m) => el("li", {}, m))),
-			));
-		}
-		if (result.warnings && result.warnings.length) {
-			nlOut.appendChild(el("div", { style: { padding: ".75rem", background: "#fff3cd", border: "1px solid #ffe69c", borderRadius: "8px", marginBottom: ".5rem", fontSize: ".85rem", color: "#664d03" } },
-				el("strong", {}, "Couldn't translate everything:"),
-				el("ul", { style: { margin: ".25rem 0 0 0", paddingLeft: "1.25rem" } },
-					result.warnings.map((w) => el("li", {}, w))),
-				result.llmAvailable === false ? el("div", { style: { marginTop: ".4rem" } }, "💡 Tip: enable the AI translator by setting ", el("code", {}, "LLM_API_KEY"), " (free key at console.groq.com).") : null,
-			));
-		}
-	}
-
-	function applyAbilityDesign(r) {
-		renderParseResult(r);
-		if (r.effects && r.effects.length) {
-			d.effects = (d.effects || []).concat(r.effects);
-			rebuildEffects();
-		}
-		if (r.customHandlerCode) {
-			d.customHandlerCode = (d.customHandlerCode ? d.customHandlerCode.trim() + "\n" : "") + r.customHandlerCode;
-			renderCustomCode();
-		}
-		if (r.shortDescription && !d.shortDesc) {
-			d.shortDesc = r.shortDescription;
-			const sd = $(".js-ability-shortdesc"); if (sd) sd.value = d.shortDesc;
-		}
-	}
-
-	async function doAutoCreate() {
-		const txt = nlText.value.trim();
-		if (!txt) { setToast("info", "Type your idea first — e.g. \"Shared Power for the whole team\" or \"30% paralyze on contact\"."); return; }
-		setToast("info", "Mechanic Studio is working…");
-		try {
-			const r = await api("POST", "/api/mechanics/design", { text: txt });
-			if (r.target === "format") {
-				setToast("info", "That sounds like a format rule (e.g. Shared Power OM). Open Formats → create a format and use Auto-create there.", 10000);
-				return;
-			}
-			applyAbilityDesign(r);
-			setToast("success", r.usedAI ? "Built with AI + safety checks — review below, then Save." : "Built from your description — review below, then Save.");
-		} catch (err) {
-			setToast("error", "Mechanic Studio failed: " + (err.message || "unknown"));
-		}
-	}
-
-	async function doParse(useAI) {
-		const txt = nlText.value.trim();
-		if (!txt) { setToast("info", "Type a description first."); return; }
-		const url = useAI ? "/api/abilities/parse-ai" : "/api/abilities/parse";
-		setToast("info", useAI ? "🤖 AI is thinking…" : "Translating…");
-		try {
-			const r = await api("POST", url, { text: txt });
-			applyAbilityDesign(r);
-		} catch (err) {
-			if (err.code === "not_configured") {
-				setToast("error", "AI not set up yet. Get a free key at console.groq.com → add LLM_API_KEY to your .env → restart the launcher.", 12000);
-			} else {
-				setToast("error", (useAI ? "AI" : "Pattern") + " parser failed: " + (err.message || "unknown"));
-			}
-		}
-	}
-
-	renderCustomCode();
-
-	const idInput = el("input", { type: "text", class: "js-ability-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } });
-
-	return el("div", {},
-		el("div", { class: "grid-2" },
-			field("Name", textInput(d, "name", { placeholder: "Rose Aura", onChange: autoId }), "The public ability name shown in-game and in tooltips."),
-			field("ID", idInput, "Auto-fills from the name.", "Internal id. Lowercase, no spaces."),
-		),
-		field("Short description", el("input", { type: "text", class: "js-ability-shortdesc", value: d.shortDesc || "", placeholder: "Shown in /dt and tooltips", on: { input: (e) => { d.shortDesc = e.target.value; } } }), "Briefly explains what the ability does."),
-
-		el("div", { class: "card", style: { background: "linear-gradient(120deg, #fff0f8, #ede0ff)", padding: "1rem", marginTop: "1rem", marginBottom: "1rem" } },
-			el("div", { style: { fontWeight: 700, color: "#3a2a4a", marginBottom: ".25rem" } }, "✨ Describe what this ability does"),
-			el("p", { style: { color: "#5a4a6a", fontSize: ".85rem", lineHeight: "1.4", margin: "0 0 .75rem 0" } },
-				"Describe any ability — even brand-new ideas. ", el("strong", {}, "Auto-create"), " tries instant patterns first, then AI if needed (set LLM_API_KEY for wild ideas). No TypeScript required."),
-			nlText,
-			el("div", { style: { display: "flex", gap: ".5rem", marginTop: ".5rem", flexWrap: "wrap", alignItems: "center" } },
-				el("button", { class: "primary", on: { click: () => doAutoCreate() } }, "✨ Auto-create"),
-				el("button", { class: "secondary", on: { click: () => doParse(false) } }, "⚡ Fast only"),
-				el("button", { class: "secondary", on: { click: () => doParse(true) } }, "🤖 AI only"),
-			),
-			nlOut,
-		),
-
-		field("Effects", effectsHost, "What was inferred (or that you added manually). Edit, reorder, or remove."),
-		customCodeHost,
-	);
-}
-function renderItemForm(d) {
-	function autoId() {
-		if (!d.id && d.name) d.id = d.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		const idEl = $(".js-item-id"); if (idEl) idEl.value = d.id || "";
-	}
-
-	const effectsHost = el("div", {});
-	function rebuildEffects() {
-		empty(effectsHost);
-		d.effects = d.effects || [];
-		// Only show item effects (those starting with "item")
-		const itemEffects = (state.effects || []).filter((k) => k.id.startsWith("item"));
-		if (d.effects.length === 0) {
-			effectsHost.appendChild(el("div", { style: { color: "#888", fontSize: ".85rem", fontStyle: "italic", padding: ".5rem 0" } }, "No effects yet. Click \"+ Add effect\" to define what this item does."));
-		}
-		d.effects.forEach((ef, idx) => {
-			const kindSel = el("select", { on: { change: (e) => { ef.kind = e.target.value; ef.params = {}; rebuildEffects(); } } },
-				el("option", { value: "" }, "Pick what this item does…"),
-				...itemEffects.map((k) => el("option", { value: k.id, selected: ef.kind === k.id }, k.id + " — " + k.description)),
-			);
-			const paramHost = el("div", { class: "grid-2", style: { marginTop: ".5rem" } });
-			const kindDef = (state.effects || []).find((k) => k.id === ef.kind);
-			if (kindDef && kindDef.paramFields) {
-				for (const fname of kindDef.paramFields) {
-					paramHost.appendChild(field(fname, el("input", { type: "text", value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; const n = Number(v); ef.params[fname] = isNaN(n) || v === "" ? v : n; } } })));
-				}
-			}
-			effectsHost.appendChild(el("div", { style: { background: "#faf6ff", padding: "1rem", borderRadius: "8px", marginBottom: ".5rem" } },
-				el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".5rem" } },
-					el("strong", {}, "Effect " + (idx + 1)),
-					el("button", { class: "danger", on: { click: () => { d.effects.splice(idx, 1); rebuildEffects(); } } }, "Remove"),
-				),
-				kindSel,
-				paramHost,
-			));
-		});
-		effectsHost.appendChild(el("button", { class: "secondary", on: { click: () => { d.effects.push({ kind: "", params: {} }); rebuildEffects(); } } }, "+  Add effect"));
-	}
-	rebuildEffects();
-
-	return el("div", {},
-		el("div", { class: "grid-2" },
-			field("Name", textInput(d, "name", { placeholder: "Pink Berry", onChange: autoId }), "The public item name shown in-game."),
-			field("ID", el("input", { type: "text", class: "js-item-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } }), "Lowercase, no spaces"),
-		),
-		field("Number (≥ 9001)", textInput(d, "num", { type: "number" }), "Unique item ID. Must be ≥ 9001."),
-		field("Short description", textInput(d, "shortDesc", { placeholder: "What this item does in battle." })),
-		field("Effects", effectsHost, "Define what this item does using approved effect templates."),
-	);
-}
-function renderLearnsetForm(d) {
-	d.moves = d.moves || [];
-
+// — Section: Moves (the learnset, merged into the Pokémon editor) —
+function secSpeciesMoves(d) {
+	d._learnsetMoves = d._learnsetMoves || [];
 	const ui = { q: "", typeFilter: "", catFilter: "" };
+	const wrap = el("div", {});
+	wrap.appendChild(el("p", { class: "sub" }, "Which moves this Pokémon can learn. Saved together with the Pokémon — no separate learnset step."));
 
-	// Species picker — must match a custom mon
-	const customMonOpts = [{ id: "", label: "— pick a custom Pokémon —" }]
-		.concat((state.customSpecies || []).map((s) => ({ id: s.data.id, label: s.data.name + " (" + s.data.id + ")" })));
-	const speciesSel = el("select", { on: { change: (e) => { d.species = e.target.value; updateMonInfo(); } } },
-		...customMonOpts.map((o) => el("option", { value: o.id, selected: d.species === o.id }, o.label)),
-	);
-	if (d.species && !customMonOpts.some((o) => o.id === d.species)) {
-		speciesSel.appendChild(el("option", { value: d.species, selected: true }, d.species + " (custom)"));
-	}
-
-	// Show selected mon's types/tier next to picker
-	const monInfo = el("span", { class: "ls-mon-info" });
-	function updateMonInfo() {
-		empty(monInfo);
-		const s = (state.customSpecies || []).find((x) => x.data.id === d.species);
-		if (!s) return;
-		monInfo.appendChild(el("span", { class: "ls-mon-info-name" }, s.data.name));
-		for (const t of (s.data.types || [])) {
-			monInfo.appendChild(el("span", { class: "type-chip", style: { background: TYPE_COLORS[t] || "#888", marginLeft: ".25rem" } }, t));
-		}
-	}
-	updateMonInfo();
-
-	// — Starting Point card (collapsible) — Blank OR Inherit from any mon
 	function inheritSearchMons() {
 		const out = [];
 		for (const s of state.customSpecies || []) out.push({ id: s.data.id, name: s.data.name, custom: true });
-		for (const s of state.psSpecies || []) out.push({ id: s.id || (s.name.toLowerCase().replace(/[^a-z0-9]/g, "")), name: s.name, custom: false });
+		for (const s of state.psSpecies || []) out.push({ id: s.id || moveIdOf(s.name), name: s.name, custom: false });
 		return out;
 	}
 
-	const startingHost = el("div", { class: "ls-starting" });
+	const startingHost = el("div", {});
 	function paintStarting() {
 		empty(startingHost);
-		if (d.moves.length > 0) {
+		if (d._learnsetMoves.length > 0) {
 			startingHost.appendChild(el("div", { class: "ls-starting-summary" },
-				el("span", {}, "📚 " + d.moves.length + " moves added."),
-				el("button", { class: "ghost", on: { click: () => {
-					if (d.moves.length && !confirm("Clear the current move list and start over?")) return;
-					d.moves = [];
+				el("span", {}, d._learnsetMoves.length + " moves in this learnset."),
+				el("button", { class: "btn btn-ghost btn-sm", on: { click: () => {
+					if (d._learnsetMoves.length && !confirm("Clear the current move list and start over?")) return;
+					d._learnsetMoves = [];
 					paintStarting(); rebuildLeft(); rebuildRight();
 				} } }, "Clear & restart"),
 			));
 			return;
 		}
-		// Empty — show pick a starting point
-		const inheritSearch = el("input", { type: "text", placeholder: "Type any Pokémon name (e.g. Charizard, Pikachu, your custom mon)…", style: { width: "100%" } });
+		const inheritSearch = el("input", { type: "text", placeholder: "Type any Pokémon name (Charizard, Pikachu, your custom mon…)" });
 		const inheritResults = el("div", { class: "ls-inherit-results" });
 		const lib = inheritSearchMons();
 		function paintInheritResults() {
 			empty(inheritResults);
 			const q = inheritSearch.value.toLowerCase().trim();
-			if (!q) { inheritResults.appendChild(el("p", { class: "sub", style: { margin: ".4rem 0 0 0", fontSize: "8.5pt" } }, "Type a name to find a Pokémon to copy its learnset from.")); return; }
+			if (!q) { inheritResults.appendChild(el("p", { class: "sub", style: { margin: ".4rem 0 0" } }, "Type a name to copy a Pokémon's whole learnset.")); return; }
 			const matches = lib.filter((m) => m.name.toLowerCase().indexOf(q) >= 0).slice(0, 40);
 			if (!matches.length) { inheritResults.appendChild(el("div", { class: "empty", style: { padding: ".5rem" } }, "No matches.")); return; }
 			for (const m of matches) {
 				inheritResults.appendChild(el("button", { class: "ls-inherit-pick", on: { click: () => doInherit(m) } },
-					m.custom ? el("span", { style: { color: "#ff5cb6", marginRight: ".25rem" } }, "●") : null,
+					m.custom ? el("span", { style: { color: "var(--pink-strong)", marginRight: ".25rem" } }, "●") : null,
 					m.name,
 				));
 			}
@@ -1848,11 +1515,9 @@ function renderLearnsetForm(d) {
 			try {
 				let moves = [];
 				if (mon.custom) {
-					// Custom mons may have their own learnset entry
 					const cl = (state.customLearnsets || []).find((l) => l.data && l.data.species === mon.id);
-					if (cl && Array.isArray(cl.data.moves)) moves = cl.data.moves.slice();
+					if (cl && Array.isArray(cl.data.moves)) moves = cl.data.moves.map(moveNameOf);
 					else {
-						// Custom mon without a stored learnset → try PS learnset under same id (rare)
 						const r = await api("GET", "/api/ps-dex/learnset/" + mon.id);
 						moves = r.moves || [];
 					}
@@ -1861,7 +1526,7 @@ function renderLearnsetForm(d) {
 					moves = r.moves || [];
 				}
 				if (!moves.length) { setToast("info", "No moves found for " + mon.name + "."); return; }
-				d.moves = moves;
+				d._learnsetMoves = moves;
 				paintStarting(); rebuildLeft(); rebuildRight();
 				setToast("success", "Copied " + moves.length + " moves from " + mon.name + ".");
 			} catch (err) {
@@ -1869,20 +1534,17 @@ function renderLearnsetForm(d) {
 			}
 		}
 		inheritSearch.addEventListener("input", debounce(() => paintInheritResults(), 160));
-
-		startingHost.appendChild(el("div", { class: "ls-starting-pick" },
+		startingHost.appendChild(el("div", { class: "ls-starting-pick", style: { marginBottom: ".85rem" } },
 			el("div", { class: "ls-starting-title" }, "How do you want to start?"),
 			el("div", { class: "ls-starting-tiles" },
-				el("button", { class: "ls-starting-tile", on: { click: () => {
-					d.moves = []; paintStarting(); rebuildLeft(); rebuildRight();
+				el("button", { class: "ls-starting-tile", type: "button", on: { click: () => {
+					d._learnsetMoves = []; paintStarting(); rebuildLeft(); rebuildRight();
 					setToast("info", "Blank learnset — add moves from the list below.");
 				} } },
-					el("div", { class: "ls-tile-icon" }, "✨"),
 					el("div", { class: "ls-tile-title" }, "Blank slate"),
 					el("div", { class: "ls-tile-desc" }, "Start with no moves and pick each one yourself."),
 				),
 				el("div", { class: "ls-starting-tile ls-tile-inherit" },
-					el("div", { class: "ls-tile-icon" }, "📋"),
 					el("div", { class: "ls-tile-title" }, "Copy from another Pokémon"),
 					el("div", { class: "ls-tile-desc" }, "Inherit the entire learnset of any custom or vanilla mon."),
 					inheritSearch,
@@ -1894,8 +1556,6 @@ function renderLearnsetForm(d) {
 	}
 
 	function moveCatalog() {
-		// Combine PS moves with any Pinkacord custom moves the admin has defined.
-		// Custom ones are tagged so the UI shows them as such.
 		const ps = (state.psMoves || []);
 		const customRaw = (state.customMoves || []);
 		const custom = customRaw.map((c) => ({
@@ -1904,52 +1564,44 @@ function renderLearnsetForm(d) {
 			type: c.data.type || "Normal",
 			category: c.data.category || "Status",
 			basePower: c.data.basePower || 0,
-			accuracy: c.data.accuracy ?? 100,
-			pp: c.data.pp || 0,
 			custom: true,
 		}));
-		// Custom moves first, then PS moves; dedupe by id (custom wins).
 		const seen = new Set(custom.map((c) => c.id));
 		return custom.concat(ps.filter((m) => !seen.has(m.id)));
 	}
-
 	function knows(name) {
-		const id = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		return (d.moves || []).some((m) => m.toLowerCase().replace(/[^a-z0-9]/g, "") === id);
+		const id = moveIdOf(name);
+		return d._learnsetMoves.some((m) => moveIdOf(m) === id);
 	}
-	function addMove(name) {
-		if (!knows(name)) d.moves.push(name);
-	}
+	function addMove(name) { if (!knows(name)) d._learnsetMoves.push(name); }
 	function removeMove(name) {
-		const id = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-		d.moves = d.moves.filter((m) => m.toLowerCase().replace(/[^a-z0-9]/g, "") !== id);
+		const id = moveIdOf(name);
+		d._learnsetMoves = d._learnsetMoves.filter((m) => moveIdOf(m) !== id);
 	}
 
 	const leftHost = el("div", { class: "ls-list" });
-	const rightHost = el("div", { class: "ls-list ls-right" });
+	const rightHost = el("div", { class: "ls-list" });
 
 	function rebuildRight() {
 		empty(rightHost);
-		if (d.moves.length === 0) {
-			rightHost.appendChild(el("div", { class: "empty", style: { padding: "1rem .5rem" } }, "No moves yet. Drag from the left."));
+		if (d._learnsetMoves.length === 0) {
+			rightHost.appendChild(el("div", { class: "empty", style: { padding: "1rem .5rem" } }, "No moves yet. Add from the left."));
 			return;
 		}
-		// For each move on the right, look up details by name if possible.
-		const detail = (name) => (state.psMoves || []).find((m) => m.name.toLowerCase() === name.toLowerCase());
-		for (const name of d.moves) {
+		const detail = (name) => moveCatalog().find((m) => moveIdOf(m.name) === moveIdOf(name));
+		for (const name of d._learnsetMoves) {
 			const m = detail(name);
 			rightHost.appendChild(el("div", { class: "ls-move ls-known" },
-				el("div", { class: "ls-move-name" }, name, m ? null : el("span", { class: "ls-move-warn", title: "Not a standard PS move — make sure this matches a custom move ID" }, " ?")),
+				el("div", { class: "ls-move-name" }, name, m ? null : el("span", { class: "ls-move-warn", title: "Not a known move — make sure this matches a custom move ID" }, " ?")),
+				el("button", { class: "wk-chip-x", on: { click: () => { removeMove(name); rebuildRight(); rebuildLeft(); paintStarting(); } } }, "×"),
 				m ? el("div", { class: "ls-move-meta" },
 					el("span", { class: "type-chip", style: { background: TYPE_COLORS[m.type] || "#888" } }, m.type),
 					el("span", { class: "ls-cat ls-cat-" + (m.category || "Status").toLowerCase() }, m.category),
 					m.basePower ? el("span", { class: "ls-bp" }, "BP " + m.basePower) : null,
 				) : null,
-				el("button", { class: "wk-chip-x", on: { click: () => { removeMove(name); rebuildRight(); rebuildLeft(); } } }, "×"),
 			));
 		}
 	}
-
 	function rebuildLeft() {
 		empty(leftHost);
 		const q = ui.q.toLowerCase().trim();
@@ -1959,7 +1611,6 @@ function renderLearnsetForm(d) {
 			if (ui.catFilter && m.category !== ui.catFilter) return false;
 			return true;
 		}).slice(0, 300);
-
 		if (list.length === 0) {
 			leftHost.appendChild(el("div", { class: "empty", style: { padding: "1rem .5rem" } }, "No moves match."));
 			return;
@@ -1973,22 +1624,21 @@ function renderLearnsetForm(d) {
 						e.dataTransfer.setData("text/pinkacord-move", m.name);
 						e.dataTransfer.effectAllowed = "copy";
 					},
-					dblclick: () => { if (!has) { addMove(m.name); rebuildRight(); rebuildLeft(); } },
+					dblclick: () => { if (!has) { addMove(m.name); rebuildRight(); rebuildLeft(); paintStarting(); } },
 				},
 			},
-				el("div", { class: "ls-move-name" }, m.name),
+				el("div", { class: "ls-move-name" }, m.custom ? el("span", { style: { color: "var(--pink-strong)", marginRight: ".25rem" } }, "●") : null, m.name),
+				has ? el("div", { class: "ls-already-tag" }, "added") : el("button", { class: "ls-add-btn", on: { click: () => { addMove(m.name); rebuildRight(); rebuildLeft(); paintStarting(); } } }, "+ Add"),
 				el("div", { class: "ls-move-meta" },
 					el("span", { class: "type-chip", style: { background: TYPE_COLORS[m.type] || "#888" } }, m.type),
 					el("span", { class: "ls-cat ls-cat-" + (m.category || "Status").toLowerCase() }, m.category),
 					m.basePower ? el("span", { class: "ls-bp" }, "BP " + m.basePower) : null,
 				),
-				has ? el("div", { class: "ls-already-tag" }, "✓ added") : el("button", { class: "ls-add-btn", on: { click: () => { addMove(m.name); rebuildRight(); rebuildLeft(); } } }, "+ Add"),
 			);
 			leftHost.appendChild(card);
 		}
 	}
 
-	// Right zone accepts drops
 	const rightZone = el("div", { class: "ls-zone", on: {
 		dragover: (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; rightZone.classList.add("wk-drag-over"); },
 		dragleave: () => { rightZone.classList.remove("wk-drag-over"); },
@@ -1998,12 +1648,12 @@ function renderLearnsetForm(d) {
 			const name = e.dataTransfer.getData("text/pinkacord-move");
 			if (!name) return;
 			addMove(name);
-			rebuildRight(); rebuildLeft();
+			rebuildRight(); rebuildLeft(); paintStarting();
 		},
 	} },
 		el("div", { class: "ls-zone-head" },
-			el("div", { class: "ls-zone-title" }, "Knows these moves"),
-			el("div", { class: "ls-zone-sub" }, "Drag from the left, double-click, or click + Add. Type a custom move ID below to add it directly."),
+			el("div", { class: "ls-zone-title" }, "Learns these moves"),
+			el("div", { class: "ls-zone-sub" }, "Drag from the left, double-click, or click + Add."),
 		),
 		rightHost,
 		(() => {
@@ -2015,17 +1665,17 @@ function renderLearnsetForm(d) {
 					if (!v) return;
 					addMove(v);
 					inp.value = "";
-					rebuildRight(); rebuildLeft();
+					rebuildRight(); rebuildLeft(); paintStarting();
 				}
 			});
 			return inp;
 		})(),
 	);
 
-		const searchDebounce = debounce((fn) => fn(), 180);
-		const search = el("input", { type: "text", placeholder: "Search moves…", value: ui.q, on: { input: (e) => { ui.q = e.target.value; searchDebounce(() => rebuildLeft()); } } });
-		const typeSel = el("select", { on: { change: (e) => { ui.typeFilter = e.target.value; rebuildLeft(); } } },
-				...[""].concat(TYPES).map((t) => el("option", { value: t }, t || "All types")));
+	const searchDebounce = debounce((fn) => fn(), 180);
+	const search = el("input", { type: "text", placeholder: "Search moves…", value: ui.q, on: { input: (e) => { ui.q = e.target.value; searchDebounce(() => rebuildLeft()); } } });
+	const typeSel = el("select", { on: { change: (e) => { ui.typeFilter = e.target.value; rebuildLeft(); } } },
+		...[""].concat(TYPES).map((t) => el("option", { value: t }, t || "All types")));
 	const catSel = el("select", { on: { change: (e) => { ui.catFilter = e.target.value; rebuildLeft(); } } },
 		...[["", "All categories"], ["Physical", "Physical"], ["Special", "Special"], ["Status", "Status"]].map(([v, l]) => el("option", { value: v }, l)));
 
@@ -2033,32 +1683,605 @@ function renderLearnsetForm(d) {
 	rebuildRight();
 	paintStarting();
 
-	return el("div", { class: "ls-root" },
-		el("div", { class: "ls-header" },
-			el("div", { class: "ls-header-left" },
-				el("div", { class: "ls-header-label" }, "This learnset is for"),
-				el("div", { class: "ls-header-row" }, speciesSel, monInfo),
+	wrap.appendChild(startingHost);
+	wrap.appendChild(el("div", { class: "ls-grid" },
+		el("div", { class: "ls-pane" },
+			el("div", { class: "ls-pane-head" },
+				el("div", { class: "ls-pane-title" }, "All moves"),
+				el("div", { class: "ls-pane-sub" }, "Standard + your custom moves (marked ●)."),
 			),
+			el("div", { class: "ls-pane-filters" }, search, typeSel, catSel),
+			leftHost,
 		),
-		startingHost,
-		el("div", { class: "ls-grid" },
-			el("div", { class: "ls-pane" },
-				el("div", { class: "ls-pane-head" },
-					el("div", { class: "ls-pane-title" }, "All moves"),
-					el("div", { class: "ls-pane-sub" }, "Click + Add or double-click. Drag also works."),
-				),
-				el("div", { class: "ls-pane-filters" }, search, typeSel, catSel),
-				leftHost,
+		rightZone,
+	));
+	return wrap;
+}
+
+// — Section: Sprite —
+function secSpeciesSprite(d) {
+	const wrap = el("div", {});
+	const box = el("div", { class: "sprite-uploader" });
+	function refresh() {
+		empty(box);
+		const previewBox = el("div", { class: "preview-box" });
+		if (d._stagedSprite) {
+			previewBox.appendChild(el("img", { src: "data:image/png;base64," + d._stagedSprite }));
+		} else if (d.id) {
+			const img = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(d.id) + "/sprite/preview?ts=" + Date.now()) });
+			img.onerror = () => { img.style.display = "none"; previewBox.appendChild(el("span", { style: { color: "var(--faint)" } }, icon("image", 26))); };
+			previewBox.appendChild(img);
+		} else {
+			previewBox.appendChild(el("span", { style: { color: "var(--faint)" } }, icon("image", 26)));
+		}
+		box.appendChild(el("div", { class: "preview" },
+			previewBox,
+			el("div", { class: "preview-info" },
+				el("strong", {}, "Sprite preview"),
+				el("div", {}, "Recommended: 96 × 96 pixel PNG or GIF, ≤ 250 KB."),
+				d._stagedSprite ? el("div", { style: { color: "var(--amber)", fontWeight: 600, marginTop: ".25rem" } }, "Staged — uploads when you Save.") : null,
+				d.id && !d._stagedSprite ? el("div", { style: { fontSize: "11.5px", marginTop: ".25rem" } }, "Served from ", el("code", {}, "/sprites/pinkacord/" + d.id + ".png")) : null,
 			),
-			rightZone,
+		));
+		const fileInput = el("input", { type: "file", accept: "image/png,image/gif", on: { change: async (e) => {
+			const file = e.target.files[0];
+			if (!file) return;
+			if (file.size > 250 * 1024) { setToast("error", "Sprite too large: " + (file.size / 1024).toFixed(0) + " KB (max 250 KB)"); return; }
+			const reader = new FileReader();
+			reader.onload = () => {
+				const base64 = String(reader.result).split(",")[1];
+				d._stagedSprite = base64;
+				setToast("info", "Sprite staged — it uploads when you Save.");
+				refresh();
+			};
+			reader.readAsDataURL(file);
+		} } });
+		box.appendChild(fileInput);
+		const btnRow = el("div", { style: { marginTop: ".55rem", display: "flex", gap: ".4rem" } });
+		if (d._stagedSprite) {
+			btnRow.appendChild(el("button", { class: "btn btn-quiet btn-sm", on: { click: () => { delete d._stagedSprite; refresh(); } } }, "Clear staged sprite"));
+		}
+		if (d.id && state.editor && state.editor.existingId) {
+			btnRow.appendChild(el("button", { class: "btn btn-danger btn-sm", on: { click: async () => {
+				if (!confirm("Remove sprite for " + d.id + "?")) return;
+				try {
+					await api("DELETE", "/api/species/" + encodeURIComponent(d.id) + "/sprite");
+					markPendingChange();
+					setToast("success", "Sprite removed.");
+					refresh();
+				} catch (err) { setToast("error", "Delete failed: " + (err.message || "unknown")); }
+			} } }, icon("trash", 13), "Remove sprite"));
+		}
+		box.appendChild(btnRow);
+	}
+	refresh();
+	wrap.appendChild(box);
+	return wrap;
+}
+
+// — Section: Extras —
+function secSpeciesExtras(d) {
+	const eggGroups = (idx) => el("select", { on: { change: (e) => { if (e.target.value === "—") d.eggGroups = d.eggGroups.filter((_, i) => i !== idx); else { d.eggGroups[idx] = e.target.value; } } } },
+		el("option", { value: "—" }, "—"),
+		...EGG_GROUPS.map((g) => el("option", { value: g, selected: d.eggGroups[idx] === g }, g)),
+	);
+	return el("div", {},
+		el("div", { class: "grid-3" },
+			field("Height (m)", textInput(d, "heightm", { type: "number" }), "Mostly flavor."),
+			field("Weight (kg)", textInput(d, "weightkg", { type: "number" }), "Used by Heat Crash etc."),
+			field("Color", selectInput(d, "color", COLORS), "Pokédex flavor."),
+			field("Egg group 1", eggGroups(0), null, "Breeding compatibility."),
+			field("Egg group 2 (optional)", eggGroups(1)),
+			null,
+			field("Singles tier", selectInput(d, "tier", TIERS), null, "Intended competitive bracket."),
+			field("Doubles tier", selectInput(d, "doublesTier", DOUBLES_TIERS)),
 		),
 	);
 }
-// ─── Format editor — registry of clauses, tier presets, common bans ─────────
-// PS's ruleset / banlist are free-form arrays of strings the engine knows
-// about. We curate the common, well-known ones here so admins click instead of
-// typing, but we still let them type custom entries (which PS will accept).
 
+// ─── Entity lists (moves / abilities / items) ────────────────────────────────
+function entityTitle(type) {
+	const t = { species: "Pokémon", moves: "Move", abilities: "Ability", items: "Item", formats: "Format" };
+	return t[type] || type;
+}
+function defaultEntity(type) {
+	if (type === "moves") return { id: "", num: 9001, name: "", type: "Normal", category: "Special", basePower: 80, accuracy: 100, pp: 15, priority: 0, target: "normal", shortDesc: "", flags: {} };
+	if (type === "abilities") return { id: "", name: "", shortDesc: "", effects: [] };
+	if (type === "items") return { id: "", num: 9001, name: "", shortDesc: "", effects: [] };
+	if (type === "formats") return { id: "", name: "[Pinkacord] ", mod: "pinkacord", section: "Pinkacord", column: 1, desc: "", gameType: "singles", ruleset: ["Standard"], banlist: [], unbanlist: [], sharedPower: false, enabled: true };
+	return {};
+}
+
+function renderEntityList(type, label, iconName, subtitle) {
+	const wrap = el("div", {});
+	wrap.appendChild(el("div", { class: "page-head" },
+		el("div", {},
+			el("h1", {}, label),
+			el("div", { class: "sub" }, subtitle || ""),
+		),
+		el("div", { class: "actions" },
+			el("button", { class: "btn btn-primary", on: { click: () => openDrawer(type, null) } }, icon("plus", 14), "New " + entityTitle(type).toLowerCase()),
+		),
+	));
+	const filter = { q: "", extra: "" };
+	let all = [];
+	const searchDebounce = debounce((fn) => fn(), 180);
+	const toolbar = el("div", { class: "list-toolbar" },
+		searchBox("Search by name or id…", (e) => { filter.q = e.target.value; searchDebounce(() => rebuild()); }),
+	);
+	if (type === "moves") {
+		toolbar.appendChild(el("select", { on: { change: (e) => { filter.extra = e.target.value; rebuild(); } } },
+			...[""].concat(TYPES).map((t) => el("option", { value: t }, t || "All types"))));
+	}
+	wrap.appendChild(toolbar);
+	const slot = el("div", {});
+	wrap.appendChild(slot);
+	function rebuild() {
+		empty(slot);
+		if (all.length === 0) {
+			slot.appendChild(el("div", { class: "empty" },
+				el("div", { class: "big" }, icon(iconName, 32)),
+				el("div", {}, "No custom " + label.toLowerCase() + " yet."),
+				el("div", { style: { marginTop: "1rem" } }, el("button", { class: "btn btn-primary", on: { click: () => openDrawer(type, null) } }, icon("plus", 14), "Create your first")),
+			));
+			return;
+		}
+		const q = filter.q.toLowerCase().trim();
+		const items = all.filter((it) => {
+			const d = it.data;
+			if (q) {
+				const blob = ((d.name || "") + " " + (d.id || "")).toLowerCase();
+				if (blob.indexOf(q) < 0) return false;
+			}
+			if (filter.extra && type === "moves" && d.type !== filter.extra) return false;
+			return true;
+		});
+		if (items.length === 0) {
+			slot.appendChild(el("div", { class: "empty" }, "No " + label.toLowerCase() + " match those filters."));
+			return;
+		}
+		const list = el("div", { class: "row-list" });
+		for (const it of items) list.appendChild(entityRow(type, it));
+		slot.appendChild(list);
+	}
+	slot.appendChild(el("div", { class: "empty" }, "Loading…"));
+	api("GET", "/api/" + type).then((r) => {
+		all = r.items || [];
+		rebuild();
+	}).catch((err) => {
+		empty(slot);
+		slot.appendChild(el("div", { class: "banner error" }, err.message));
+	});
+	return wrap;
+}
+
+function entityRow(type, it) {
+	const d = it.data;
+	const open = () => type === "formats" ? openFormatEditor(it) : openDrawer(type, it);
+	const meta = el("div", { class: "rmeta" });
+	if (type === "moves") {
+		meta.appendChild(typeChip(d.type));
+		meta.appendChild(el("span", {}, d.category + " · " + (d.basePower || 0) + " BP · " + (d.accuracy === true ? "—" : d.accuracy + "%") + " acc · " + (d.pp || 0) + " PP"));
+	} else if (type === "abilities" || type === "items") {
+		meta.appendChild(el("span", {}, d.shortDesc || "No description"));
+		if (type === "abilities" && d.customHandlerCode) meta.appendChild(el("span", { class: "pill accent" }, "custom code"));
+		if ((d.effects || []).length) meta.appendChild(el("span", { class: "pill" }, (d.effects || []).length + " effect" + ((d.effects || []).length === 1 ? "" : "s")));
+	} else if (type === "formats") {
+		meta.appendChild(el("span", {}, (d.section || "Pinkacord") + " · " + (d.mod || "?") + " · " + (d.gameType || "singles")));
+		if (d.team) meta.appendChild(el("span", { class: "pill" }, d.team === "random" ? "random teams" : d.team));
+		if (d.sharedPower) meta.appendChild(el("span", { class: "pill accent" }, "Shared Power"));
+		if (d.enabled === false) meta.appendChild(el("span", { class: "pill warn" }, "hidden"));
+	}
+	return el("div", { class: "row", on: { click: open } },
+		el("div", { class: "rbody" },
+			el("div", { class: "rname" }, d.name || d.id),
+			meta,
+		),
+		el("div", { class: "row-actions" },
+			el("button", { class: "btn btn-ghost btn-icon", title: "Duplicate", on: { click: (e) => { e.stopPropagation(); duplicateEntity(type, it); } } }, icon("copy", 14)),
+			el("button", { class: "btn btn-danger btn-icon", title: "Delete", on: { click: (e) => { e.stopPropagation(); confirmDelete(type, it); } } }, icon("trash", 14)),
+		),
+	);
+}
+function duplicateEntity(type, it) {
+	const clone = deepClone(it.data);
+	clone.name = (clone.name || "New") + " Copy";
+	clone.id = "";
+	if (typeof clone.num === "number") clone.num = clone.num + 1;
+	const prefill = { id: "", _rev: null, data: clone };
+	if (type === "formats") openFormatEditor(prefill);
+	else openDrawer(type, prefill);
+}
+
+// ─── Drawer editor (moves / abilities / items) ───────────────────────────────
+function openDrawer(type, existing) {
+	const looksLikeNewWithPrefill = existing && (!existing.id || !existing._rev) && existing.data;
+	let prefill = null;
+	if (looksLikeNewWithPrefill) { prefill = deepClone(existing.data); existing = null; }
+	const data = existing ? deepClone(existing.data) : (prefill || defaultEntity(type));
+	const rev = existing ? existing._rev : null;
+	const overlay = el("div", { class: "modal-overlay" });
+	let isClosed = false;
+	function close() {
+		if (isClosed) return;
+		isClosed = true;
+		if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+		document.removeEventListener("keydown", onKey);
+	}
+	function onKey(e) {
+		if (e.key === "Escape") { e.stopPropagation(); close(); return; }
+		if (e.key === "Tab") {
+			const focusable = overlay.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+			if (focusable.length === 0) return;
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			if (e.shiftKey) {
+				if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+			} else {
+				if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+			}
+		}
+	}
+	document.addEventListener("keydown", onKey);
+	overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+	const errSlot = el("div", {});
+	const bodySlot = el("div", { class: "modal-body" });
+	bodySlot.appendChild(errSlot);
+	bodySlot.appendChild(
+		type === "moves" ? renderMoveForm(data) :
+		type === "abilities" ? renderAbilityForm(data) :
+		type === "items" ? renderItemForm(data) :
+		el("div", {}, "Unknown entity type"),
+	);
+
+	function highlightFieldError(errorText) {
+		bodySlot.querySelectorAll(".field.is-invalid").forEach((n) => n.classList.remove("is-invalid"));
+		const key = errorText.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+		if (!key) return false;
+		const candidates = bodySlot.querySelectorAll('[data-field="' + key + '"]');
+		for (const n of candidates) {
+			const f = n.closest(".field") || n;
+			f.classList.add("is-invalid"); f.scrollIntoView({ behavior: "smooth", block: "center" });
+			return true;
+		}
+		return false;
+	}
+
+	async function save(opts) {
+		empty(errSlot);
+		bodySlot.querySelectorAll(".field.is-invalid").forEach((n) => n.classList.remove("is-invalid"));
+		try {
+			const url = "/api/" + type + (existing ? "/" + encodeURIComponent(existing.id) : "");
+			const method = existing ? "PUT" : "POST";
+			const body = data;
+			if (existing && rev) body.__rev = rev;
+			const headers = { "X-Pinkacord-Admin": "1", "Content-Type": "application/json" };
+			if (existing && rev) headers["If-Match"] = rev;
+			const r = await fetch(adminApiPath(url), { method, headers, credentials: "same-origin", body: JSON.stringify(body) });
+			const json = await r.json().catch(() => ({ ok: false, message: "bad response" }));
+			if (!r.ok || !json.ok) {
+				errSlot.appendChild(el("div", { class: "banner error" }, json.message || r.statusText));
+				if (json.fieldErrors) {
+					for (const fe of json.fieldErrors) {
+						errSlot.appendChild(el("div", { class: "field-error" }, "• " + fe));
+						highlightFieldError(fe);
+					}
+				}
+				bodySlot.scrollTop = 0;
+				return false;
+			}
+			await refreshEntityCache(type);
+			markPendingChange();
+			close();
+			if (opts && opts.thenBuild) { render(); await doBuildAndApply(); return true; }
+			setToast("success", "Saved " + (data.name || data.id) + ". Hit Deploy when you're ready to push it live.");
+			render();
+			return true;
+		} catch (err) { errSlot.appendChild(el("div", { class: "banner error" }, err.message)); return false; }
+	}
+
+	const drawer = el("div", { class: "modal" },
+		el("div", { class: "modal-head" },
+			el("h2", {}, (existing ? "Edit " : "New ") + entityTitle(type).toLowerCase()),
+			el("button", { class: "x", on: { click: close } }, icon("x", 16)),
+		),
+		bodySlot,
+		el("div", { class: "modal-foot" },
+			el("div", { class: "note" }, existing ? "Saved changes aren't live until you Deploy" : "Added on save — Deploy to push live"),
+			el("div", { style: { display: "flex", gap: ".5rem" } },
+				el("button", { class: "btn btn-quiet", on: { click: close } }, "Cancel"),
+				el("button", { class: "btn", on: { click: () => save() } }, "Save"),
+				el("button", { class: "btn btn-primary", on: { click: () => save({ thenBuild: true }) } }, icon("rocket", 14), state.hosted ? "Save & publish" : "Save & deploy"),
+			),
+		),
+	);
+	overlay.appendChild(drawer);
+	document.body.appendChild(overlay);
+	const firstInput = drawer.querySelector("input, textarea");
+	if (firstInput) firstInput.focus();
+}
+
+// ─── Move form ───────────────────────────────────────────────────────────────
+function accuracyControl(d) {
+	const isAlwaysHit = d.accuracy === true;
+	const numInput = el("input", { type: "number", value: isAlwaysHit ? "" : (d.accuracy != null ? d.accuracy : 100), min: 1, max: 100, disabled: isAlwaysHit, on: { input: (e) => { d.accuracy = Number(e.target.value); } } });
+	const cb = el("input", { type: "checkbox", checked: isAlwaysHit, style: { width: "auto" }, on: { change: (e) => {
+		if (e.target.checked) { d.accuracy = true; numInput.disabled = true; numInput.value = ""; }
+		else { d.accuracy = 100; numInput.disabled = false; numInput.value = "100"; }
+	} } });
+	return el("div", { style: { display: "flex", gap: ".75rem", alignItems: "center" } },
+		numInput,
+		el("label", { style: { display: "inline-flex", gap: ".3rem", fontWeight: "normal", alignItems: "center", whiteSpace: "nowrap", fontSize: "13px", color: "var(--dim)" } }, cb, "Always hits"),
+	);
+}
+function renderMoveForm(d) {
+	d.flags = d.flags || {};
+	function autoId() {
+		if (d.name) d.id = moveIdOf(d.name);
+		const idEl = $(".js-move-id"); if (idEl) idEl.value = d.id || "";
+	}
+	const flagChips = ["contact", "protect", "mirror", "sound", "punch", "bite", "slicing", "bullet", "powder", "heal"].map((f) => {
+		const cb = el("input", { type: "checkbox", checked: d.flags[f] === 1, style: { width: "auto" }, on: { change: (e) => { if (e.target.checked) d.flags[f] = 1; else delete d.flags[f]; } } });
+		return el("label", { style: { display: "inline-flex", gap: ".3rem", marginRight: ".75rem", marginBottom: ".3rem", fontWeight: "normal", alignItems: "center", fontSize: "13px", color: "var(--dim)" } }, cb, f);
+	});
+	return el("div", {},
+		el("div", { class: "grid-2" },
+			field("Name", textInput(d, "name", { placeholder: "Pink Bolt", onChange: autoId }), "Public move name."),
+			field("ID", el("input", { type: "text", class: "js-move-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } }), "Lowercase, no spaces. Auto-fills from name."),
+			field("Move number", textInput(d, "num", { type: "number" }), "Unique, must be ≥ 9001."),
+			field("Type", selectInput(d, "type", TYPES)),
+			field("Category", selectInput(d, "category", ["Physical", "Special", "Status"]), "Physical = Atk/Def · Special = SpA/SpD · Status = no damage."),
+			field("Base power", textInput(d, "basePower", { type: "number" }), "0 for Status moves."),
+			field("Accuracy", accuracyControl(d)),
+			field("PP", textInput(d, "pp", { type: "number" }), "Typical range 5–40."),
+			field("Priority", textInput(d, "priority", { type: "number" }), "0 normal, +1 Quick Attack style."),
+		),
+		field("Short description", textInput(d, "shortDesc"), "Shown in /dt and tooltips."),
+		field("Flags", el("div", {}, flagChips), "What this move can be blocked or boosted by."),
+	);
+}
+
+// ─── Ability form (effects registry + AI designer) ───────────────────────────
+function effectsBuilder(d, filterPrefix) {
+	const effectsHost = el("div", {});
+	function rebuildEffects() {
+		empty(effectsHost);
+		d.effects = d.effects || [];
+		const kinds = (state.effects || []).filter((k) => !filterPrefix || k.id.startsWith(filterPrefix));
+		if (d.effects.length === 0) {
+			effectsHost.appendChild(el("div", { style: { color: "var(--faint)", fontSize: "12.5px", padding: ".4rem 0" } }, "No effects yet."));
+		}
+		d.effects.forEach((ef, idx) => {
+			const kindSel = el("select", { on: { change: (e) => { ef.kind = e.target.value; ef.params = {}; rebuildEffects(); } } },
+				el("option", { value: "" }, "Pick what this does…"),
+				...kinds.map((k) => el("option", { value: k.id, selected: ef.kind === k.id }, k.id + " — " + k.description)),
+			);
+			const paramHost = el("div", { class: "grid-2", style: { marginTop: ".5rem" } });
+			const kindDef = (state.effects || []).find((k) => k.id === ef.kind);
+			if (kindDef && kindDef.paramFields) {
+				for (const fname of kindDef.paramFields) {
+					paramHost.appendChild(field(fname, el("input", { type: "text", value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; const n = Number(v); ef.params[fname] = isNaN(n) || v === "" ? v : n; } } })));
+				}
+			}
+			effectsHost.appendChild(el("div", { class: "effect-block" },
+				el("div", { class: "ehead" },
+					el("strong", {}, "EFFECT " + (idx + 1)),
+					el("button", { class: "btn btn-danger btn-sm", on: { click: () => { d.effects.splice(idx, 1); rebuildEffects(); } } }, "Remove"),
+				),
+				kindSel,
+				paramHost,
+			));
+		});
+		effectsHost.appendChild(el("button", { class: "btn btn-quiet btn-sm", on: { click: () => { d.effects.push({ kind: "", params: {} }); rebuildEffects(); } } }, icon("plus", 13), "Add effect manually"));
+	}
+	rebuildEffects();
+	return { host: effectsHost, rebuild: rebuildEffects };
+}
+
+function renderAbilityForm(d) {
+	function autoId() {
+		if (d.name) d.id = moveIdOf(d.name);
+		const idEl = $(".js-ability-id"); if (idEl) idEl.value = d.id || "";
+	}
+	const effects = effectsBuilder(d, null);
+	const nlText = el("textarea", { rows: 3, placeholder: "Describe ANYTHING — e.g. \"30% chance to paralyze on contact\", \"Switch out when hit for 33% HP\", \"Doubles defense in sand\". AI can invent abilities that don't exist yet." });
+	const nlOut = el("div", {});
+	const customCodeHost = el("div", {});
+
+	function renderCustomCode() {
+		empty(customCodeHost);
+		if (!d.customHandlerCode) return;
+		const wrap = el("div", { class: "code-block" });
+		wrap.appendChild(el("div", { class: "chead" },
+			el("span", {}, "Custom handler code (AI-generated — review before saving)"),
+			el("button", { class: "btn btn-ghost btn-sm", on: { click: () => { d.customHandlerCode = ""; renderCustomCode(); } } }, "Remove"),
+		));
+		const ta = el("textarea", { rows: Math.min(14, Math.max(4, d.customHandlerCode.split("\n").length + 1)), value: d.customHandlerCode, on: { input: (e) => { d.customHandlerCode = e.target.value; } } });
+		wrap.appendChild(ta);
+		wrap.appendChild(el("div", { style: { color: "var(--faint)", fontSize: "11.5px", marginTop: ".4rem" } }, "Goes verbatim into the generated ability. The smoke test catches syntax errors, not logic bugs."));
+		customCodeHost.appendChild(wrap);
+	}
+
+	function renderParseResult(result) {
+		empty(nlOut);
+		if (result.shortDescription) {
+			nlOut.appendChild(el("div", { class: "banner success", style: { marginTop: ".6rem", marginBottom: ".4rem" } },
+				el("div", { style: { fontWeight: 600, marginBottom: ".15rem" } }, (result.approach === "custom" ? "Wrote a custom handler" : result.approach === "mixed" ? "Combined effects + custom code" : "Composed from safe building blocks")),
+				el("div", {}, result.shortDescription),
+				result.explanation ? el("div", { style: { opacity: .8, fontStyle: "italic", marginTop: ".15rem" } }, result.explanation) : null,
+			));
+		}
+		if (result.matchedPatterns && result.matchedPatterns.length) {
+			nlOut.appendChild(el("div", { class: "banner success", style: { marginBottom: ".4rem" } },
+				el("div", { style: { fontWeight: 600 } }, "Parsed " + result.matchedPatterns.length + " effect(s):"),
+				el("ul", { style: { margin: ".2rem 0 0", paddingLeft: "1.25rem" } },
+					result.matchedPatterns.map((m) => el("li", {}, m))),
+			));
+		}
+		if (result.warnings && result.warnings.length) {
+			nlOut.appendChild(el("div", { class: "banner info", style: { marginBottom: ".4rem" } },
+				el("strong", {}, "Couldn't translate everything:"),
+				el("ul", { style: { margin: ".25rem 0 0", paddingLeft: "1.25rem" } },
+					result.warnings.map((w) => el("li", {}, w))),
+				result.llmAvailable === false ? el("div", { style: { marginTop: ".4rem" } }, "Tip: enable the AI translator by setting ", el("code", {}, "LLM_API_KEY"), " (free key at console.groq.com).") : null,
+			));
+		}
+	}
+
+	function applyAbilityDesign(r) {
+		renderParseResult(r);
+		if (r.effects && r.effects.length) {
+			d.effects = (d.effects || []).concat(r.effects);
+			effects.rebuild();
+		}
+		if (r.customHandlerCode) {
+			d.customHandlerCode = (d.customHandlerCode ? d.customHandlerCode.trim() + "\n" : "") + r.customHandlerCode;
+			renderCustomCode();
+		}
+		if (r.shortDescription && !d.shortDesc) {
+			d.shortDesc = r.shortDescription;
+			const sd = $(".js-ability-shortdesc"); if (sd) sd.value = d.shortDesc;
+		}
+	}
+
+	async function doAutoCreate() {
+		const txt = nlText.value.trim();
+		if (!txt) { setToast("info", "Type your idea first — e.g. \"30% paralyze on contact\"."); return; }
+		setToast("info", "Designing the ability…");
+		try {
+			const r = await api("POST", "/api/mechanics/design", { text: txt });
+			if (r.target === "format") {
+				setToast("info", "That sounds like a format rule. Open Formats → create a format and use the AI box there.", 10000);
+				return;
+			}
+			applyAbilityDesign(r);
+			setToast("success", r.usedAI ? "Built with AI — review below, then Save." : "Built from your description — review below, then Save.");
+		} catch (err) {
+			setToast("error", "Designer failed: " + (err.message || "unknown"));
+		}
+	}
+	async function doParse(useAI) {
+		const txt = nlText.value.trim();
+		if (!txt) { setToast("info", "Type a description first."); return; }
+		const url = useAI ? "/api/abilities/parse-ai" : "/api/abilities/parse";
+		setToast("info", useAI ? "AI is thinking…" : "Translating…");
+		try {
+			const r = await api("POST", url, { text: txt });
+			applyAbilityDesign(r);
+		} catch (err) {
+			if (err.code === "not_configured") {
+				setToast("error", "AI not set up. Get a free key at console.groq.com → add LLM_API_KEY → restart the launcher.", 12000);
+			} else {
+				setToast("error", (useAI ? "AI" : "Pattern") + " parser failed: " + (err.message || "unknown"));
+			}
+		}
+	}
+
+	renderCustomCode();
+
+	return el("div", {},
+		el("div", { class: "grid-2" },
+			field("Name", textInput(d, "name", { placeholder: "Rose Aura", onChange: autoId }), "Public ability name."),
+			field("ID", el("input", { type: "text", class: "js-ability-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } }), "Auto-fills from the name."),
+		),
+		field("Short description", el("input", { type: "text", class: "js-ability-shortdesc", value: d.shortDesc || "", placeholder: "Shown in /dt and tooltips", on: { input: (e) => { d.shortDesc = e.target.value; } } })),
+		el("div", { class: "nl-box" },
+			el("div", { class: "nl-title" }, icon("wand", 15), "Describe what this ability does"),
+			el("p", {}, "Plain English in, working ability out. Instant patterns are tried first, then AI for wild ideas."),
+			nlText,
+			el("div", { style: { display: "flex", gap: ".5rem", marginTop: ".55rem", flexWrap: "wrap", alignItems: "center" } },
+				el("button", { class: "btn btn-primary", on: { click: () => doAutoCreate() } }, icon("wand", 14), "Generate"),
+				el("button", { class: "btn btn-ghost btn-sm", title: "Instant pattern matcher only — no AI call", on: { click: () => doParse(false) } }, "Patterns only"),
+				el("button", { class: "btn btn-ghost btn-sm", title: "Send straight to the AI", on: { click: () => doParse(true) } }, "AI only"),
+			),
+			nlOut,
+		),
+		field("Effects", effects.host, "What was generated (or added manually). Edit or remove freely."),
+		customCodeHost,
+	);
+}
+
+// ─── Item form ───────────────────────────────────────────────────────────────
+function renderItemForm(d) {
+	function autoId() {
+		if (d.name) d.id = moveIdOf(d.name);
+		const idEl = $(".js-item-id"); if (idEl) idEl.value = d.id || "";
+	}
+	const effects = effectsBuilder(d, "item");
+	return el("div", {},
+		el("div", { class: "grid-2" },
+			field("Name", textInput(d, "name", { placeholder: "Pink Berry", onChange: autoId }), "Public item name."),
+			field("ID", el("input", { type: "text", class: "js-item-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } }), "Lowercase, no spaces."),
+		),
+		field("Number", textInput(d, "num", { type: "number" }), "Unique, must be ≥ 9001."),
+		field("Short description", textInput(d, "shortDesc", { placeholder: "What this item does in battle." })),
+		field("Effects", effects.host, "Define what this item does using approved effect templates."),
+	);
+}
+
+// ─── Formats list ────────────────────────────────────────────────────────────
+function renderFormatsList() {
+	const wrap = el("div", {});
+	wrap.appendChild(el("div", { class: "page-head" },
+		el("div", {},
+			el("h1", {}, "Formats"),
+			el("div", { class: "sub" }, "The battle formats your server offers — rules, bans, clauses, and special mechanics."),
+		),
+		el("div", { class: "actions" },
+			el("button", { class: "btn btn-primary", on: { click: () => openFormatEditor(null) } }, icon("plus", 14), "New format"),
+		),
+	));
+	const filter = { q: "", extra: "" };
+	let all = [];
+	const searchDebounce = debounce((fn) => fn(), 180);
+	const toolbar = el("div", { class: "list-toolbar" },
+		searchBox("Search formats…", (e) => { filter.q = e.target.value; searchDebounce(() => rebuild()); }),
+		el("select", { on: { change: (e) => { filter.extra = e.target.value; rebuild(); } } },
+			el("option", { value: "" }, "All dexes"),
+			...["pinkacord", "gen9", "gen8", "gen7", "gen6", "gen5", "gen4", "gen3", "gen2", "gen1"].map((m) => el("option", { value: m }, m))),
+	);
+	wrap.appendChild(toolbar);
+	const slot = el("div", {});
+	wrap.appendChild(slot);
+	function rebuild() {
+		empty(slot);
+		if (all.length === 0) {
+			slot.appendChild(el("div", { class: "empty" },
+				el("div", { class: "big" }, icon("trophy", 32)),
+				el("div", {}, "No custom formats yet."),
+				el("div", { style: { marginTop: "1rem" } }, el("button", { class: "btn btn-primary", on: { click: () => openFormatEditor(null) } }, icon("plus", 14), "Create your first format")),
+			));
+			return;
+		}
+		const q = filter.q.toLowerCase().trim();
+		const items = all.filter((it) => {
+			const d = it.data;
+			if (q && ((d.name || "") + " " + (d.id || "")).toLowerCase().indexOf(q) < 0) return false;
+			if (filter.extra && d.mod !== filter.extra) return false;
+			return true;
+		});
+		if (items.length === 0) {
+			slot.appendChild(el("div", { class: "empty" }, "No formats match those filters."));
+			return;
+		}
+		const list = el("div", { class: "row-list" });
+		for (const it of items) list.appendChild(entityRow("formats", it));
+		slot.appendChild(list);
+	}
+	slot.appendChild(el("div", { class: "empty" }, "Loading…"));
+	api("GET", "/api/formats").then((r) => {
+		all = r.items || [];
+		state.customFormats = all;
+		rebuild();
+	}).catch((err) => {
+		empty(slot);
+		slot.appendChild(el("div", { class: "banner error" }, err.message));
+	});
+	return wrap;
+}
+
+// ─── Format editor — registry of clauses, tier presets, common bans ─────────
 const KNOWN_CLAUSES = [
 	{ id: "Standard", label: "Standard ruleset", desc: "Pulls in the basic competitive rules. Almost every format starts with this — leave it on.", required: true },
 	{ id: "Sleep Clause Mod", label: "Sleep Clause", desc: "Only one of the opponent's Pokémon can be put to sleep at a time. Prevents Spore-spam strategies." },
@@ -2078,8 +2301,6 @@ const KNOWN_CLAUSES = [
 	{ id: "Force Open Team Sheet", label: "Open Team Sheet", desc: "Both players see each other's teams (no Pokémon, items, or moves are hidden)." },
 ];
 
-// Standard, sensible defaults for the most popular tiers in Gen 9 singles.
-// Clicking a preset replaces the banlist with these — admins can tweak after.
 const TIER_PRESETS = {
 	OU: { banlist: ["Uber", "AG", "Moody", "Shadow Tag", "Arena Trap", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects", "Shed Tail", "Tera Blast"], note: "Standard OverUsed gen 9 banlist." },
 	Ubers: { banlist: ["AG", "Moody", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects"], note: "Ubers — anything but Anything Goes." },
@@ -2091,25 +2312,7 @@ const TIER_PRESETS = {
 	AG: { banlist: [], note: "Anything Goes — no Pokémon, item, ability, or move is banned." },
 };
 
-// ─── Format editor — tour-organizer first ───────────────────────────────────
-// Designed so a tour organizer can spin up a new format end-to-end without
-// understanding PS ruleset string primitives. Every "advanced" PS rule is
-// surfaced as a real UI control:
-//   - team sizes  →  Min/Max/Picked Team Size = N
-//   - level cap   →  Adjust Level = N  (and Min/Max Level = N)
-//   - gen filter  →  Min/Max Source Gen = N
-//   - monotype    →  Force Monotype = <Type>
-//   - tera force  →  Force Tera Type = <Type>
-//   - EV limit    →  EV Limit = N
-//
-// The data model is exactly the same as v1: every change ends up in
-// d.ruleset[] / d.banlist[] / d.unbanlist[] / d.gameType / d.team /
-// d.bestOfDefault / d.mod / d.sharedPower. The generator + smoke test
-// don't need to know we redrew the UI.
-
-// ── Parametric-rule helpers ─────────────────────────────────────────────────
-// PS rules with "LHS = N" form. We parse them out of d.ruleset[] for display
-// and write them back on change.
+// ── Parametric-rule helpers (PS "LHS = N" rules in d.ruleset[]) ─────────────
 function fmtGetParam(d, lhs) {
 	d.ruleset = d.ruleset || [];
 	const pre = lhs + " = ";
@@ -2128,77 +2331,62 @@ function fmtToggleRule(d, rule, on) {
 	if (on) { if (!d.ruleset.includes(rule)) d.ruleset.push(rule); }
 	else { d.ruleset = d.ruleset.filter((r) => r !== rule); }
 }
+function normalizeName(s) { return String(s).replace(/^[+\-*]/, "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
-// ── Allowed-pool category routing ───────────────────────────────────────────
-// banlist[]/unbanlist[] are flat string arrays. We categorize entries by
-// looking them up in the various PS dexes so the UI can show separate panes
-// for Pokémon / Items / Moves / Abilities.
+// banlist[]/unbanlist[] are flat strings — categorize by dex lookup so the UI
+// can show separate panes for Pokémon / Items / Moves / Abilities.
 function categorizePoolEntry(entry) {
-	const id = String(entry).toLowerCase().replace(/[^a-z0-9]/g, "");
-	if (!id) return "unknown";
-	// Strip leading + - * (PS allow/ban shorthand) before lookup
 	const bare = String(entry).replace(/^[+\-*]/, "").trim();
 	const bid = bare.toLowerCase().replace(/[^a-z0-9]/g, "");
-	const inDex = (arr, name) => (arr || []).some((x) => {
+	if (!bid) return "unknown";
+	const inDex = (arr) => (arr || []).some((x) => {
 		const n = typeof x === "string" ? x : (x && x.name) || "";
 		return n.toLowerCase().replace(/[^a-z0-9]/g, "") === bid;
 	});
-	// Custom items aren't fetched yet; only PS items are categorized.
-	if (inDex(state.customSpecies && state.customSpecies.map((s) => s.data && s.data.name), null)) return "species";
-	if (inDex(state.psSpecies, null)) return "species";
-	if (inDex(state.customMoves && state.customMoves.map((m) => m.data && m.data.name), null)) return "moves";
-	if (inDex(state.psMoves, null)) return "moves";
-	if (inDex(state.customAbilities && state.customAbilities.map((a) => a.data && a.data.name), null)) return "abilities";
-	if (inDex(state.psAbilities, null)) return "abilities";
-	// Tier names like Uber/OU/UU stay as "species" since they restrict species.
+	if (inDex((state.customSpecies || []).map((s) => s.data && s.data.name))) return "species";
+	if (inDex(state.psSpecies)) return "species";
+	if (inDex((state.customMoves || []).map((m) => m.data && m.data.name))) return "moves";
+	if (inDex(state.psMoves)) return "moves";
+	if (inDex((state.customAbilities || []).map((a) => a.data && a.data.name))) return "abilities";
+	if (inDex(state.psAbilities)) return "abilities";
 	const tiers = ["AG", "Uber", "Ubers", "OU", "UU", "UUBL", "RU", "RUBL", "NU", "NUBL", "PU", "PUBL", "ZU", "ZUBL", "NFE", "LC"];
 	if (tiers.some((t) => t.toLowerCase() === bare.toLowerCase())) return "species";
 	return "other";
 }
 
-// ── Format preset gallery ───────────────────────────────────────────────────
-// Picking one prefills the editor form so the organizer starts from a working
-// template, then tweaks. Every preset only writes the fields it cares about,
-// so e.g. picking "Monotype" doesn't reset the section/column the admin set.
+// ── Format presets ──────────────────────────────────────────────────────────
 const FORMAT_PRESETS = [
-	{ id: "ou", icon: "🌟", title: "OU (Standard)", desc: "Smogon OverUsed — the most popular competitive ruleset.",
+	{ id: "ou", title: "OU (Standard)", desc: "Smogon OverUsed — the most popular competitive ruleset.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Evasion Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["Uber", "AG", "Moody", "Shadow Tag", "Arena Trap", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects", "Shed Tail"]; d.unbanlist = []; d.sharedPower = false; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] OU"; if (!d.desc) d.desc = "OU rules on the Pinkacord dex."; } },
-	{ id: "ubers", icon: "💥", title: "Ubers", desc: "Anything except AG and a few broken combos.",
+	{ id: "ubers", title: "Ubers", desc: "Anything except AG and a few broken combos.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["AG", "Moody", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects"]; d.unbanlist = []; d.sharedPower = false; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Ubers"; } },
-	{ id: "ag", icon: "🌌", title: "Anything Goes", desc: "No bans. Mostly for testing & jank.",
+	{ id: "ag", title: "Anything Goes", desc: "No bans. Mostly for testing & jank.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = []; d.unbanlist = []; d.sharedPower = false; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] AG"; } },
-	{ id: "random", icon: "🎲", title: "Random Battle", desc: "Server generates teams each battle.",
+	{ id: "random", title: "Random Battle", desc: "Server generates teams each battle.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.team = "random"; d.ruleset = ["[Gen 9] Random Battle"]; d.banlist = []; d.unbanlist = []; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Random Battle"; } },
-	{ id: "doubles", icon: "👥", title: "Doubles OU", desc: "2v2 active. Team play, fast pace.",
+	{ id: "doubles", title: "Doubles OU", desc: "2v2 active. Team play, fast pace.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "doubles"; d.ruleset = ["Standard Doubles", "Sleep Moves Clause", "Species Clause", "OHKO Clause", "Evasion Moves Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["DUber", "Moody", "Swagger", "Last Respects"]; d.unbanlist = []; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Doubles OU"; } },
-	{ id: "ffa", icon: "🌪️", title: "Free-for-all", desc: "4-player free-for-all chaos.",
+	{ id: "ffa", title: "Free-for-all", desc: "4-player free-for-all chaos.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "freeforall"; d.ruleset = ["Standard FFA", "Species Clause", "OHKO Clause", "Evasion Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["Uber", "AG", "Baton Pass"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] FFA"; } },
-	{ id: "monotype", icon: "🌈", title: "Monotype", desc: "Whole team must share a type.",
+	{ id: "monotype", title: "Monotype", desc: "Whole team must share a type.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Sleep Clause Mod", "Same Type Clause", "Species Clause", "OHKO Clause", "Evasion Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["Uber", "AG"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Monotype"; } },
-	{ id: "inverse", icon: "🔄", title: "Inverse", desc: "Type chart is inverted — Fire beats Water.",
+	{ id: "inverse", title: "Inverse", desc: "Type chart is inverted — Fire beats Water.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Inverse Mod", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["AG", "Moody"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Inverse"; } },
-	{ id: "scalemons", icon: "📏", title: "Scalemons", desc: "Every mon's BST is scaled to 600.",
+	{ id: "scalemons", title: "Scalemons", desc: "Every mon's BST is scaled to 600.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Scalemons Mod", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Scalemons"; } },
-	{ id: "aaa", icon: "⚡", title: "Almost Any Ability", desc: "Most mons can run almost any ability.",
+	{ id: "aaa", title: "Almost Any Ability", desc: "Most mons can run almost any ability.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "!Obtainable Abilities", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["Uber", "AG", "Arena Trap", "Comatose", "Contrary", "Fur Coat", "Huge Power", "Imposter", "Innards Out", "Magic Bounce", "Magnet Pull", "Moody", "Neutralizing Gas", "Parental Bond", "Poison Heal", "Pure Power", "Shadow Tag", "Simple", "Speed Boost", "Stakeout", "Triage", "Unburden", "Water Bubble", "Wonder Guard"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] AAA"; } },
-	{ id: "bh", icon: "🏗️", title: "Balanced Hackmons", desc: "Any move/ability/item. Few bans.",
+	{ id: "bh", title: "Balanced Hackmons", desc: "Any move/ability/item. Few bans.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["-Nonexistent", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod", "Forme Clause"]; d.banlist = ["Arceus", "Calyrex-Shadow", "Eternatus-Eternamax", "Groudon-Primal", "Kyogre-Primal", "Magearna", "Mewtwo", "Necrozma-Ultra", "Rayquaza", "Zacian-Crowned"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] BH"; } },
-	{ id: "bring6pick3", icon: "🎯", title: "Bring 6, Pick 3", desc: "Build 6 mons, choose 3 at preview. Tournament-style.",
+	{ id: "bring6pick3", title: "Bring 6, Pick 3", desc: "Build 6 mons, choose 3 at preview. Tournament-style.",
 		apply: (d) => { d.mod = "gen9"; d.gameType = "singles"; d.ruleset = ["Standard", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod", "Min Team Size = 6", "Max Team Size = 6", "Picked Team Size = 3"]; d.banlist = ["Uber", "AG", "Moody", "Baton Pass", "Last Respects"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Bring 6 Pick 3"; } },
-	{ id: "pinkacord_ou", icon: "🎀", title: "Pinkacord OU", desc: "Custom dex + OU rules. Your community's home format.",
+	{ id: "pinkacord_ou", title: "Pinkacord OU", desc: "Custom dex + OU rules. Your community's home format.",
 		apply: (d) => { d.mod = "pinkacord"; d.gameType = "singles"; d.ruleset = ["Standard", "Sleep Clause Mod", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; d.banlist = ["Uber", "AG", "Moody", "Baton Pass"]; d.sharedPower = false; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] OU"; } },
-	{ id: "shared_power", icon: "🤝", title: "Shared Power", desc: "Active mons share each switched-in ability.",
+	{ id: "shared_power", title: "Shared Power", desc: "Active mons share each switched-in ability.",
 		apply: (d) => { d.mod = "pinkacord"; d.gameType = "singles"; d.sharedPower = true; d.ruleset = ["Standard", "Species Clause", "OHKO Clause", "Endless Battle Clause", "HP Percentage Mod"]; if (!d.name || d.name === "[Pinkacord] ") d.name = "[Pinkacord] Shared Power"; } },
-	{ id: "blank", icon: "⬜", title: "Blank", desc: "Empty form. Build from scratch.",
-		apply: (d) => { /* leave the defaults */ } },
+	{ id: "blank", title: "Blank", desc: "Empty form. Build from scratch.",
+		apply: (d) => { /* leave defaults */ } },
 ];
-
-// ─── Card-Stack format editor (v3) ────────────────────────────────────────
-// Single scrollable page composed of stackable cards. Each card owns one piece
-// of the format and mutates d in place. Cross-card updates flow through
-// ctrl.refreshAll(except), which rebuilds the sticky preview pill + every card
-// EXCEPT the one passed in. Sticky header is outside the card host so the
-// format-name input keeps focus while typing.
 
 const DEX_OPTIONS_V3 = [
 	{ id: "pinkacord", label: "Pinkacord", desc: "Custom dex + Gen 9 base." },
@@ -2213,17 +2401,17 @@ const DEX_OPTIONS_V3 = [
 	{ id: "gen1", label: "Gen 1", desc: "RBY." },
 ];
 const GAME_TYPES_V3 = [
-	{ id: "singles", label: "Singles", icon: "⚔️", desc: "1v1 active." },
-	{ id: "doubles", label: "Doubles", icon: "⚔️⚔️", desc: "2v2 active." },
-	{ id: "triples", label: "Triples", icon: "⚔️⚔️⚔️", desc: "3v3 active." },
-	{ id: "multi", label: "Multi", icon: "🤝", desc: "2v2, two players per side." },
-	{ id: "freeforall", label: "Free-for-all", icon: "🌪️", desc: "4 players, every mon for itself." },
-	{ id: "rotation", label: "Rotation", icon: "🔄", desc: "Triples with rotation." },
+	{ id: "singles", label: "Singles", desc: "1v1 active." },
+	{ id: "doubles", label: "Doubles", desc: "2v2 active." },
+	{ id: "triples", label: "Triples", desc: "3v3 active." },
+	{ id: "multi", label: "Multi", desc: "2v2, two players per side." },
+	{ id: "freeforall", label: "Free-for-all", desc: "4 players, every mon for itself." },
+	{ id: "rotation", label: "Rotation", desc: "Triples with rotation." },
 ];
 const TEAM_SOURCES_V3 = [
-	{ id: "", label: "Players bring their own", icon: "🛠️", desc: "Standard — players build & bring." },
-	{ id: "random", label: "Random teams", icon: "🎲", desc: "Server generates each team." },
-	{ id: "randomFFA", label: "Random + FFA", icon: "🎲🌪️", desc: "Random teams in free-for-all." },
+	{ id: "", label: "Players bring their own", desc: "Standard — players build & bring." },
+	{ id: "random", label: "Random teams", desc: "Server generates each team." },
+	{ id: "randomFFA", label: "Random + FFA", desc: "Random teams in free-for-all." },
 ];
 const MECHANICS_V3 = [
 	{ id: "shared", label: "Shared Power", desc: "Active mons share each switched-in ability (Smogon OM).",
@@ -2279,7 +2467,7 @@ function buildCardV3(id, title, defaultExpanded, renderBody, d, ctrl) {
 	const card = {};
 	const bodyHost = el("div", { class: "fc-body" });
 	const summaryEl = el("div", { class: "fc-summary" });
-	const chevEl = el("span", { class: "fc-chev" });
+	const chevEl = el("span", { class: "fc-chev" }, icon("chev", 14));
 	const titleRow = el("div", { class: "fc-title-row" },
 		chevEl,
 		el("span", { class: "fc-title" }, title),
@@ -2288,7 +2476,6 @@ function buildCardV3(id, title, defaultExpanded, renderBody, d, ctrl) {
 	let isOpen = defaultExpanded;
 	function applyOpen() {
 		card.node.dataset.collapsed = String(!isOpen);
-		chevEl.textContent = isOpen ? "▾" : "▸";
 	}
 	titleRow.addEventListener("click", () => { isOpen = !isOpen; applyOpen(); });
 	card.node = el("div", { class: "fc-card", "data-card": id }, titleRow, bodyHost);
@@ -2304,8 +2491,76 @@ function buildCardV3(id, title, defaultExpanded, renderBody, d, ctrl) {
 	return card;
 }
 
-function renderFormatEditor(d) {
-	// Defaults
+// ─── Full-page format editor ─────────────────────────────────────────────────
+function openFormatEditor(existing) {
+	const looksLikeNewWithPrefill = existing && (!existing.id || !existing._rev) && existing.data;
+	let prefill = null;
+	if (looksLikeNewWithPrefill) { prefill = deepClone(existing.data); existing = null; }
+	const data = existing ? deepClone(existing.data) : (prefill || defaultEntity("formats"));
+	state.editor = {
+		type: "formats",
+		data,
+		rev: existing ? existing._rev : null,
+		existingId: existing ? existing.id : null,
+		snapshot: JSON.stringify(data),
+	};
+	render();
+	window.scrollTo(0, 0);
+}
+
+function renderFormatEditorPage() {
+	const ed = state.editor;
+	const d = ed.data;
+	const isNew = !ed.existingId;
+	const wrap = el("div", {});
+	const errSlot = el("div", {});
+
+	const head = el("div", { class: "editor-head" },
+		el("button", { class: "btn btn-quiet back", on: { click: () => closeEditor(false) } }, icon("back", 14), "Formats"),
+		el("h1", {}, isNew ? "New format" : (d.name || ed.existingId)),
+		!isNew ? el("button", { class: "btn btn-danger", on: { click: () => confirmDelete("formats", { id: ed.existingId, data: d }, () => { state.editor = null; render(); }) } }, icon("trash", 14), "Delete") : null,
+		el("button", { class: "btn", on: { click: () => saveFormat({}) } }, "Save"),
+		el("button", { class: "btn btn-primary", on: { click: () => saveFormat({ thenBuild: true }) } }, icon("rocket", 14), state.hosted ? "Save & publish" : "Save & deploy"),
+	);
+	wrap.appendChild(head);
+	wrap.appendChild(errSlot);
+	wrap.appendChild(renderFormatEditor(d, isNew));
+
+	async function saveFormat(opts) {
+		empty(errSlot);
+		const body = deepClone(d);
+		delete body._startedFrom; delete body._banPane; delete body._banBrowse;
+		try {
+			const url = "/api/formats" + (ed.existingId ? "/" + encodeURIComponent(ed.existingId) : "");
+			const method = ed.existingId ? "PUT" : "POST";
+			if (ed.existingId && ed.rev) body.__rev = ed.rev;
+			const headers = { "X-Pinkacord-Admin": "1", "Content-Type": "application/json" };
+			if (ed.existingId && ed.rev) headers["If-Match"] = ed.rev;
+			const r = await fetch(adminApiPath(url), { method, headers, credentials: "same-origin", body: JSON.stringify(body) });
+			const json = await r.json().catch(() => ({ ok: false, message: "bad response" }));
+			if (!r.ok || !json.ok) {
+				errSlot.appendChild(el("div", { class: "banner error" }, json.message || r.statusText));
+				if (json.fieldErrors) for (const fe of json.fieldErrors) errSlot.appendChild(el("div", { class: "field-error" }, "• " + fe));
+				window.scrollTo({ top: 0, behavior: "smooth" });
+				return false;
+			}
+			await refreshEntityCache("formats");
+			markPendingChange();
+			state.editor = null;
+			render();
+			if (opts && opts.thenBuild) { await doBuildAndApply(); return true; }
+			setToast("success", "Saved " + (d.name || d.id) + ". Hit Deploy when you're ready to push it live.");
+			return true;
+		} catch (err) {
+			errSlot.appendChild(el("div", { class: "banner error" }, err.message || String(err)));
+			window.scrollTo({ top: 0, behavior: "smooth" });
+			return false;
+		}
+	}
+	return wrap;
+}
+
+function renderFormatEditor(d, isNew) {
 	d.ruleset = d.ruleset || ["Standard"];
 	d.banlist = d.banlist || [];
 	d.unbanlist = d.unbanlist || [];
@@ -2317,7 +2572,7 @@ function renderFormatEditor(d) {
 
 	const wrap = el("div", { class: "fc-editor" });
 
-	// STICKY HEADER — outside the card host so input focus survives refreshAll
+	// Sticky header — outside the card host so the name input keeps focus.
 	const previewSlot = el("div", { class: "fc-preview-slot" });
 	function rebuildPreview() { empty(previewSlot); previewSlot.appendChild(buildPreviewPill(d)); }
 	const idDisplay = el("code", {}, d.id || "(auto)");
@@ -2358,9 +2613,8 @@ function renderFormatEditor(d) {
 		},
 	};
 
-	const isNew = !d.id;
 	ctrl.cards = [
-		buildCardV3("starting", "Starting point", isNew && !d._startedFrom, renderStartingBodyV3, d, ctrl),
+		buildCardV3("starting", "Starting point", !!isNew && !d._startedFrom, renderStartingBodyV3, d, ctrl),
 		buildCardV3("identity", "Identity", true, renderIdentityBodyV3, d, ctrl),
 		buildCardV3("battle", "Battle shape", true, renderBattleBodyV3, d, ctrl),
 		buildCardV3("bans", "Bans & unbans", false, renderBansBodyV3, d, ctrl),
@@ -2378,7 +2632,7 @@ function renderStartingBodyV3(d, host, ctrl, card) {
 		card.setSummary("Started from: " + d._startedFrom);
 		host.appendChild(el("div", { class: "fmt-section" },
 			el("p", { class: "sub" }, "Started from ", el("strong", {}, d._startedFrom), ". You can switch — current edits will be replaced."),
-			el("button", { class: "secondary", on: { click: () => { delete d._startedFrom; ctrl.refreshAll(); } } }, "Switch starting point"),
+			el("button", { class: "btn btn-quiet btn-sm", on: { click: () => { delete d._startedFrom; ctrl.refreshAll(); } } }, "Switch starting point"),
 		));
 		return;
 	}
@@ -2392,7 +2646,6 @@ function renderStartingBodyV3(d, host, ctrl, card) {
 			ctrl.refreshAll();
 			setToast("success", "Started from " + p.title + ".");
 		} } },
-			el("div", { class: "ico" }, p.icon),
 			el("div", { class: "title" }, p.title),
 			el("div", { class: "desc" }, p.desc),
 		));
@@ -2441,7 +2694,7 @@ function renderStartingBodyV3(d, host, ctrl, card) {
 		el("h3", {}, "Describe with AI"),
 		el("p", { class: "sub" }, "Plain English → full format config."),
 		aiText,
-		el("button", { class: "primary", style: { marginTop: ".5rem" }, on: { click: doAuto } }, "Auto-create"),
+		el("button", { class: "btn btn-primary", style: { marginTop: ".5rem" }, on: { click: doAuto } }, icon("wand", 14), "Auto-create"),
 	));
 
 	const customFormats = state.customFormats || [];
@@ -2450,7 +2703,7 @@ function renderStartingBodyV3(d, host, ctrl, card) {
 			el("option", { value: "" }, "— pick a format to clone —"),
 			...customFormats.map((f) => el("option", { value: f.id }, (f.data && f.data.name) || f.id)),
 		);
-		const cloneBtn = el("button", { class: "secondary", on: { click: () => {
+		const cloneBtn = el("button", { class: "btn btn-quiet", on: { click: () => {
 			const id = sel.value; if (!id) { setToast("info", "Pick one first."); return; }
 			const src = customFormats.find((f) => f.id === id); if (!src) return;
 			const copy = deepClone(src.data);
@@ -2496,7 +2749,6 @@ function renderIdentityBodyV3(d, host, ctrl, card) {
 				paintMod();
 				if (ctrl.rebuildPreview) ctrl.rebuildPreview();
 				card.setSummary((d.section || "Pinkacord") + " · col " + (d.column || 1) + (d.enabled === false ? " · hidden" : ""));
-				// Bans card depends on d.mod for the species-pool filter — refresh just it.
 				const bansCard = ctrl.cards.find((c) => c.id === "bans");
 				if (bansCard) bansCard.refresh();
 			} } },
@@ -2533,16 +2785,15 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 	card.setSummary(bits.join(" · "));
 
 	function tileGrid(opts, currentId, onPick) {
-		const host = el("div", { class: "fmt-tile-grid cols-3" });
+		const grid = el("div", { class: "fmt-tile-grid cols-3" });
 		for (const o of opts) {
 			const sel = currentId === o.id;
-			host.appendChild(el("div", { class: "fmt-tile" + (sel ? " selected" : ""), on: { click: () => onPick(o.id) } },
-				el("div", { class: "ico" }, o.icon),
+			grid.appendChild(el("div", { class: "fmt-tile" + (sel ? " selected" : ""), on: { click: () => onPick(o.id) } },
 				el("div", { class: "title" }, o.label),
 				el("div", { class: "desc" }, o.desc),
 			));
 		}
-		return host;
+		return grid;
 	}
 
 	const gameHost = tileGrid(GAME_TYPES_V3, d.gameType || "singles", (id) => { d.gameType = id; ctrl.refreshAll(); });
@@ -2570,10 +2821,10 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 				ctrl.refreshAll(card);
 			} } });
 		return el("div", { style: { marginBottom: ".5rem" } },
-			el("div", { style: { display: "flex", alignItems: "center", gap: ".5rem", marginBottom: ".2rem" } },
-				cb, el("div", { style: { fontWeight: 700, fontSize: "9.5pt", flex: 1 } }, label),
+			el("div", { style: { display: "flex", alignItems: "center", gap: ".5rem", marginBottom: ".15rem" } },
+				cb, el("div", { style: { fontWeight: 600, fontSize: "13px", flex: 1 } }, label),
 			),
-			hint ? el("div", { style: { fontSize: "8.5pt", color: "#6a5a7a", marginBottom: ".2rem" } }, hint) : null,
+			hint ? el("div", { style: { fontSize: "11.5px", color: "var(--faint)", marginBottom: ".2rem" } }, hint) : null,
 			el("div", { class: "fmt-slider-row" }, slider, valEl),
 		);
 	}
@@ -2591,7 +2842,7 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 	const evBox = paramSlider("EV Limit", "EV budget", "Total EVs. Default 510.", 0, 510, 510);
 
 	const minG = fmtGetParam(d, "Min Source Gen"), maxG = fmtGetParam(d, "Max Source Gen");
-	const genLabel = el("div", { style: { fontWeight: 700, fontSize: ".85rem", marginBottom: ".35rem" } },
+	const genLabel = el("div", { style: { fontWeight: 600, fontSize: "12.5px", marginBottom: ".35rem", color: "var(--dim)" } },
 		"Allowed gens: " + (minG || maxG ? "gen " + (minG || 1) + " – gen " + (maxG || 9) : "every gen (no filter)"));
 	const genBox = el("div", {},
 		genLabel,
@@ -2599,7 +2850,7 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 		paramSlider("Max Source Gen", "Latest gen", "Maximum source gen.", 1, 9, 9),
 	);
 
-	const TYPE_OPTS = ["", ...(typeof TYPES !== "undefined" ? TYPES : [])];
+	const TYPE_OPTS = [""].concat(TYPES);
 	const monoSel = el("select", { on: { change: (e) => { fmtSetParam(d, "Force Monotype", e.target.value || null); ctrl.refreshAll(card); } } },
 		...TYPE_OPTS.map((t) => el("option", { value: t, selected: (fmtGetParam(d, "Force Monotype") || "") === t }, t || "(no monotype)")));
 	const teraSel = el("select", { on: { change: (e) => { fmtSetParam(d, "Force Tera Type", e.target.value || null); ctrl.refreshAll(card); } } },
@@ -2608,10 +2859,12 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Game type"), gameHost));
 	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Team source"), teamHost));
 	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Match length"), bestOf));
-	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Team size"), teamSizesBox));
-	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Level cap"), levelBox));
-	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "EV limit"), evBox));
-	host.appendChild(el("div", { class: "fmt-section" }, el("h3", {}, "Gen filter"), genBox));
+	host.appendChild(el("div", { class: "fmt-section grid-2", style: { gap: "0 1.5rem" } },
+		el("div", {}, el("h3", {}, "Team size"), teamSizesBox),
+		el("div", {}, el("h3", {}, "Level cap"), levelBox),
+		el("div", {}, el("h3", {}, "EV limit"), evBox),
+		el("div", {}, el("h3", {}, "Gen filter"), genBox),
+	));
 	host.appendChild(el("div", { class: "fmt-section" },
 		el("div", { class: "grid-2" },
 			field("Force Monotype", monoSel, "Whole team must share this type."),
@@ -2620,11 +2873,7 @@ function renderBattleBodyV3(d, host, ctrl, card) {
 	));
 }
 
-
-// ── Card body: Bans & unbans (unified, search-first) ──────────────────────
-// One card with sub-tabs for the four ban categories. Default view shows ONLY
-// what's currently banned + a search box; the library appears as you type, or
-// when you hit "Browse all." Mon browse is grouped by tier so it's not random.
+// ── Card body: Bans & unbans ───────────────────────────────────────────────
 const TIER_ORDER_V3 = ["AG", "Uber", "Ubers", "OU", "OUBL", "UUBL", "UU", "RUBL", "RU", "NUBL", "NU", "PUBL", "PU", "ZUBL", "ZU", "NFE", "LC", "Custom", "—"];
 function tierRank(t) {
 	const i = TIER_ORDER_V3.indexOf(t || "—");
@@ -2638,7 +2887,6 @@ function renderBansBodyV3(d, host, ctrl, card) {
 	const totalUnban = (d.unbanlist || []).length;
 	card.setSummary(totalBan + " banned" + (totalUnban ? ", " + totalUnban + " unbanned" : ""));
 
-	// Persist active pane across refreshes on the data object so we don't reset.
 	d._banPane = d._banPane || "species";
 	d._banBrowse = d._banBrowse || false;
 
@@ -2674,11 +2922,10 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 	const pane = d._banPane;
 	const sectLabel = { species: "Pokémon", items: "items", moves: "moves", abilities: "abilities" }[pane];
 
-	// — Tier presets (Pokémon only)
 	if (pane === "species") {
 		const presetRow = el("div", { class: "wk-presets" });
 		for (const name of Object.keys(TIER_PRESETS)) {
-			presetRow.appendChild(el("button", { class: "secondary", on: { click: () => {
+			presetRow.appendChild(el("button", { class: "btn btn-quiet btn-sm", on: { click: () => {
 				const p = TIER_PRESETS[name];
 				if (!confirm("Replace banlist with " + name + " preset?\n\n" + p.note)) return;
 				d.banlist = p.banlist.slice();
@@ -2686,15 +2933,15 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 				setToast("success", "Applied " + name + " preset.");
 			} } }, name));
 		}
-		paneSlot.appendChild(el("div", { class: "fmt-section" }, presetRow));
+		paneSlot.appendChild(el("div", { class: "fmt-section" },
+			el("p", { class: "sub", style: { marginBottom: ".35rem" } }, "Tier presets — replaces the current ban list:"),
+			presetRow));
 	}
 
-	// Lazy fetch items list
 	if (pane === "items" && !state._psItemsLite) {
 		api("GET", "/api/ps-dex/items").then((r) => { state._psItemsLite = r.items || []; renderBanPane(d, paneSlot, ctrl, card); }).catch(() => {});
 	}
 
-	// — Currently banned/unbanned chips (the at-a-glance state)
 	const chips = el("div", { class: "fc-chip-row" });
 	let chipCount = 0;
 	for (const e of d.banlist || []) {
@@ -2720,15 +2967,13 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 		));
 	}
 	paneSlot.appendChild(el("div", { class: "fmt-section" },
-		el("h3", { style: { fontSize: "10pt" } }, "Currently set"),
+		el("h3", {}, "Currently set"),
 		chipCount ? chips : el("p", { class: "sub", style: { margin: 0 } }, "Nothing banned or unbanned yet."),
 	));
 
-	// — Search + add (the primary action)
-	const search = el("input", { type: "text", placeholder: "Search " + sectLabel + " — type to add by name, Enter to ban", style: { width: "100%", padding: ".45rem .6rem", fontSize: "10pt" } });
+	const search = el("input", { type: "text", placeholder: "Search " + sectLabel + " — type a name, Enter to ban", style: { flex: "1", minWidth: "180px" } });
 	const resultBox = el("div", { class: "fc-search-results" });
 
-	// Build the underlying library once per pane render
 	const modFilter = (pane === "species" && d.mod && d.mod !== "pinkacord") ? d.mod : null;
 	if (modFilter && !state._modSpecies[modFilter]) {
 		state._modSpecies = state._modSpecies || {};
@@ -2745,9 +2990,9 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 			const speciesPool = modFilter ? (state._modSpecies && state._modSpecies[modFilter]) : null;
 			if (speciesPool && Array.isArray(speciesPool)) {
 				const poolSet = {};
-				for (const n of speciesPool) poolSet[n.toLowerCase().replace(/[^a-z0-9]/g, "")] = true;
+				for (const n of speciesPool) poolSet[normalizeName(n)] = true;
 				for (const s of state.psSpecies || []) {
-					if (poolSet[s.name.toLowerCase().replace(/[^a-z0-9]/g, "")]) out.push({ name: s.name, tier: s.tier || "—", custom: false });
+					if (poolSet[normalizeName(s.name)]) out.push({ name: s.name, tier: s.tier || "—", custom: false });
 				}
 			} else {
 				for (const s of state.psSpecies || []) out.push({ name: s.name, tier: s.tier || "—", custom: false });
@@ -2788,21 +3033,17 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 		ctrl.refreshAll();
 	}
 
-	const browseBtn = el("button", { class: "secondary", style: { marginLeft: ".5rem" }, on: { click: () => { d._banBrowse = !d._banBrowse; renderBanPane(d, paneSlot, ctrl, card); } } }, d._banBrowse ? "Hide all" : "Browse all");
-	const banBtn = el("button", { class: "danger", title: "Ban what's typed (Enter)", on: { click: () => commitTyped("ban") } }, "🚫 Ban");
-	const allowBtn = el("button", { class: "secondary", title: "Add to unban list", on: { click: () => commitTyped("unban") } }, "✅ Allow");
+	const browseBtn = el("button", { class: "btn btn-quiet btn-sm", on: { click: () => { d._banBrowse = !d._banBrowse; renderBanPane(d, paneSlot, ctrl, card); } } }, d._banBrowse ? "Hide all" : "Browse all");
+	const banBtn = el("button", { class: "btn btn-sm", style: { color: "var(--red)" }, title: "Ban what's typed (Enter)", on: { click: () => commitTyped("ban") } }, "Ban");
+	const allowBtn = el("button", { class: "btn btn-sm", style: { color: "var(--green)" }, title: "Add to unban list", on: { click: () => commitTyped("unban") } }, "Allow");
 	function commitTyped(mode) {
 		const v = search.value.trim(); if (!v) { setToast("info", "Type a name first."); return; }
 		const exact = lib.find((it) => it.name.toLowerCase() === v.toLowerCase());
-		// If a mod-pool is active and the typed name isn't in it, refuse — prevents
-		// e.g. unbanning Mewtwo in a Gen 5 OU format where Mewtwo just isn't in scope.
 		if (!exact && pane === "species" && modFilter) {
 			setToast("error", '"' + v + '" isn\'t in the ' + modFilter.toUpperCase() + " dex. Pick from the suggestions or switch the dex on the Identity card.", 7000);
 			return;
 		}
 		if (!exact && pane === "species") {
-			// Pinkacord pool — still validate against the merged species library so typos
-			// don't silently land in the banlist.
 			setToast("error", '"' + v + '" isn\'t a known Pokémon. Pick from suggestions.', 7000);
 			return;
 		}
@@ -2819,15 +3060,14 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 		empty(resultBox);
 		const q = search.value.toLowerCase().trim();
 		const showBrowse = d._banBrowse;
-		// Items pane: if library hasn't loaded yet, show a loading state instead of "type to search"
 		if (pane === "items" && !state._psItemsLite) {
-			resultBox.appendChild(el("p", { class: "sub", style: { margin: ".5rem 0 0 0" } }, "Loading items…"));
+			resultBox.appendChild(el("p", { class: "sub", style: { margin: ".5rem 0 0" } }, "Loading items…"));
 			return;
 		}
 		if (!q && !showBrowse) {
-			resultBox.appendChild(el("p", { class: "sub", style: { margin: ".5rem 0 0 0" } },
+			resultBox.appendChild(el("p", { class: "sub", style: { margin: ".5rem 0 0" } },
 				"Type above to find a " + sectLabel.replace(/s$/, "") + ", then hit ",
-				el("strong", {}, "🚫 Ban"), " or ", el("strong", {}, "✅ Allow"), ". Or click ",
+				el("strong", {}, "Ban"), " or ", el("strong", {}, "Allow"), ". Or click ",
 				el("strong", {}, "Browse all"), " to scroll the full list."));
 			return;
 		}
@@ -2867,15 +3107,15 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 			} else {
 				target.appendChild(el("div", { class: "fmt-pool-item" + (status === "banned" ? " banned" : status === "unbanned" ? " unbanned" : ""),
 					on: { click: () => cycle(it.name) } },
-					el("div", { class: "pi-name" }, it.custom ? el("span", { style: { color: "#ff5cb6", marginRight: ".25rem" } }, "●") : null, it.name),
+					el("div", { class: "pi-name" }, it.custom ? el("span", { style: { color: "var(--pink-strong)", marginRight: ".25rem" } }, "●") : null, it.name),
 					it.tier ? el("span", { class: "pi-meta" }, it.tier) : null,
 					status === "banned" ? el("span", { class: "pi-tag ban" }, "BAN") : status === "unbanned" ? el("span", { class: "pi-tag unban" }, "UNBAN") : null,
 				));
 			}
 		}
 		if (q || !(pane === "species" && showBrowse)) resultBox.appendChild(group);
-		if (!shown) resultBox.appendChild(el("div", { class: "empty", style: { padding: ".75rem", color: "#888" } }, "No matches."));
-		else if (total > shown) resultBox.appendChild(el("div", { class: "empty", style: { padding: ".4rem", fontSize: ".8rem", color: "#888" } }, "Showing " + shown + " of " + total + " — refine search."));
+		if (!shown) resultBox.appendChild(el("div", { class: "empty", style: { padding: ".75rem" } }, "No matches."));
+		else if (total > shown) resultBox.appendChild(el("div", { class: "empty", style: { padding: ".4rem", fontSize: "12px" } }, "Showing " + shown + " of " + total + " — refine search."));
 	}
 	search.addEventListener("input", debounce(() => renderResults(), 160));
 	search.addEventListener("keydown", (e) => {
@@ -2884,7 +3124,7 @@ function renderBanPane(d, paneSlot, ctrl, card) {
 
 	paneSlot.appendChild(el("div", { class: "fmt-section" },
 		el("div", { style: { display: "flex", gap: ".4rem", alignItems: "center", flexWrap: "wrap" } }, search, banBtn, allowBtn, browseBtn),
-		el("div", { class: "sub", style: { fontSize: "8.5pt", margin: ".3rem 0 0 0" } }, "Enter = ban. Click a result tile to cycle neutral → ban → unban → neutral."),
+		el("div", { class: "sub", style: { margin: ".3rem 0 0" } }, "Enter = ban. Click a result to cycle neutral → ban → unban → neutral."),
 		resultBox,
 	));
 	renderResults();
@@ -2895,21 +3135,20 @@ function renderClausesBodyV3(d, host, ctrl, card) {
 	const active = KNOWN_CLAUSES.filter((c) => (d.ruleset || []).includes(c.id));
 	card.setSummary(active.length + " active");
 
-	const list = el("div", { style: { display: "grid", gap: ".4rem" } });
+	const list = el("div", { style: { display: "grid", gap: ".4rem", gridTemplateColumns: "1fr 1fr" } });
 	for (const c of KNOWN_CLAUSES) {
 		const checked = (d.ruleset || []).includes(c.id);
 		const cb = el("input", { type: "checkbox", checked, disabled: c.required, style: { width: "auto", marginTop: "3px" },
 			on: { change: () => { fmtToggleRule(d, c.id, !checked); ctrl.refreshAll(); } } });
-		list.appendChild(el("label", { class: "fmt-toggle " + (checked ? "on" : ""), style: { cursor: c.required ? "default" : "pointer" } },
+		list.appendChild(el("label", { class: "fmt-toggle " + (checked ? "on" : ""), style: { cursor: c.required ? "default" : "pointer", marginBottom: 0 } },
 			cb,
 			el("div", {},
-				el("div", { class: "t-title" }, c.label, c.required ? el("span", { style: { fontSize: ".7rem", color: "#888", marginLeft: ".4rem", fontWeight: "normal" } }, "(required)") : null),
+				el("div", { class: "t-title" }, c.label, c.required ? el("span", { style: { fontSize: "10.5px", color: "var(--faint)", marginLeft: ".4rem", fontWeight: "normal" } }, "(required)") : null),
 				el("div", { class: "t-desc" }, c.desc),
 			),
 		));
 	}
 	host.appendChild(el("div", { class: "fmt-section" },
-		el("h3", {}, "Clauses"),
 		el("p", { class: "sub" }, "The competitive rules. ", el("strong", {}, "Standard"), " bundles the common ones."),
 		list,
 	));
@@ -2920,23 +3159,22 @@ function renderMechanicsBodyV3(d, host, ctrl, card) {
 	const onCount = MECHANICS_V3.filter((m) => m.isOn(d)).length;
 	card.setSummary(onCount ? onCount + " active" : "none");
 
-	const list = el("div", { style: { display: "grid", gap: ".4rem" } });
+	const list = el("div", { style: { display: "grid", gap: ".4rem", gridTemplateColumns: "1fr 1fr" } });
 	for (const m of MECHANICS_V3) {
 		const on = m.isOn(d);
 		const disabled = m.disabled ? m.disabled(d) : false;
 		const cb = el("input", { type: "checkbox", checked: on, disabled,
 			on: { change: (e) => { m.set(d, e.target.checked); ctrl.refreshAll(); } } });
-		list.appendChild(el("label", { class: "fmt-toggle " + (on ? "on" : ""), style: { opacity: disabled ? .55 : 1, cursor: disabled ? "not-allowed" : "pointer" } },
+		list.appendChild(el("label", { class: "fmt-toggle " + (on ? "on" : ""), style: { opacity: disabled ? .55 : 1, cursor: disabled ? "not-allowed" : "pointer", marginBottom: 0 } },
 			cb,
 			el("div", {},
 				el("div", { class: "t-title" }, m.label),
-				el("div", { class: "t-desc" }, m.desc, disabled ? el("span", { style: { color: "#a02020", marginLeft: ".4rem" } }, "(" + m.disabledReason + ")") : null),
+				el("div", { class: "t-desc" }, m.desc, disabled ? el("span", { style: { color: "var(--red)", marginLeft: ".4rem" } }, "(" + m.disabledReason + ")") : null),
 			),
 		));
 	}
 	host.appendChild(el("div", { class: "fmt-section" },
-		el("h3", {}, "Other Metas"),
-		el("p", { class: "sub" }, "Popular Smogon OM mechanics."),
+		el("p", { class: "sub" }, "Popular Smogon \"Other Metagame\" mechanics."),
 		list,
 	));
 }
@@ -2989,21 +3227,20 @@ function renderPowerBodyV3(d, host, ctrl, card) {
 	};
 
 	host.appendChild(el("div", { class: "fmt-section" },
-		el("p", { class: "sub" }, "Direct edit. These textareas are the source of truth for ", el("code", {}, "ruleset"), " / ", el("code", {}, "banlist"), " / ", el("code", {}, "unbanlist"), " — edits flow into the other cards (250ms debounce). Cards' edits flow back here unless you're typing."),
+		el("p", { class: "sub" }, "Direct edit. These textareas are the source of truth for ", el("code", {}, "ruleset"), " / ", el("code", {}, "banlist"), " / ", el("code", {}, "unbanlist"), " — edits flow into the other cards."),
 		field("Extra rules (one per line)", rawRules, "Anything PS knows but isn't surfaced as a control above."),
 		el("div", { class: "grid-2" },
 			field("Banlist (one per line)", rawBan, "Free-text bans."),
-			field("Unbanlist (one per line)", rawUnban, "Allow specific entries the rules would normally ban."),
+			field("Unbanlist (one per line)", rawUnban, "Allow entries the rules would normally ban."),
 		),
-		el("label", { style: { display: "inline-flex", alignItems: "center", gap: ".35rem", marginTop: ".4rem" } }, showJsonCb, "Show raw JSON (debug)"),
+		el("label", { style: { display: "inline-flex", alignItems: "center", gap: ".35rem", marginTop: ".4rem", fontSize: "13px", color: "var(--dim)" } }, showJsonCb, "Show raw JSON (debug)"),
 		jsonBox,
-		el("hr", { style: { margin: "1rem 0", border: "none", borderTop: "1px solid #d8cfe5" } }),
+		el("hr", {}),
 		el("h3", {}, "Summary"),
 		renderFormatPreviewSummary(d),
 	));
 }
 
-// ── Inline summary preview (embedded in Clauses tab) ──────────────────────
 function renderFormatPreviewSummary(d) {
 	d.ruleset = d.ruleset || [];
 	d.banlist = d.banlist || [];
@@ -3016,11 +3253,11 @@ function renderFormatPreviewSummary(d) {
 	const MODL = { pinkacord: "Pinkacord", gen9: "Gen 9", gen8: "Gen 8", gen7: "Gen 7", gen6: "Gen 6", gen5: "Gen 5", gen4: "Gen 4", gen3: "Gen 3", gen2: "Gen 2", gen1: "Gen 1" };
 	lines.push("Dex: " + (MODL[d.mod] || d.mod));
 	const mn = fmtGetParam(d, "Min Source Gen"), mx = fmtGetParam(d, "Max Source Gen");
-	if (mn || mx) lines.push("Gens " + (mn || 1) + "\u2013" + (mx || 9));
+	if (mn || mx) lines.push("Gens " + (mn || 1) + "–" + (mx || 9));
 	const cats = { species: 0, items: 0, moves: 0, abilities: 0 };
 	for (const e of d.banlist) cats[categorizePoolEntry(e)] = (cats[categorizePoolEntry(e)] || 0) + 1;
 	const bp = [];
-	if (cats.species) bp.push(cats.species + " Pok\u00e9mon");
+	if (cats.species) bp.push(cats.species + " Pokémon");
 	if (cats.items) bp.push(cats.items + " items");
 	if (cats.moves) bp.push(cats.moves + " moves");
 	if (cats.abilities) bp.push(cats.abilities + " abilities");
@@ -3033,133 +3270,48 @@ function renderFormatPreviewSummary(d) {
 		navigator.clipboard.writeText(text).then(() => setToast("success", "Summary copied.")).catch(() => setToast("error", "Couldn't copy."));
 	}
 	return el("div", {},
-		el("div", { style: { background: "#f0e8f5", borderRadius: "6px", padding: ".75rem 1rem", fontSize: ".85rem", lineHeight: "1.6" } },
-			el("strong", { style: { fontSize: ".9rem", color: "#2a1a3a" } }, d.name || "(unnamed)"),
-			d.desc ? el("div", { style: { color: "#6a5a7a", fontStyle: "italic", marginTop: ".15rem", marginBottom: ".4rem", fontSize: ".8rem" } }, d.desc) : null,
-			el("ul", { style: { margin: ".3rem 0 0 0", paddingLeft: "1.2rem", color: "#4a3a5e" } }, ...lines.map((l) => el("li", {}, l))),
+		el("div", { class: "fmt-summary-box" },
+			el("strong", {}, d.name || "(unnamed)"),
+			d.desc ? el("div", { style: { color: "var(--faint)", fontStyle: "italic", margin: ".15rem 0 .4rem", fontSize: "12px" } }, d.desc) : null,
+			el("ul", { style: { margin: ".3rem 0 0", paddingLeft: "1.2rem", color: "var(--dim)" } }, ...lines.map((l) => el("li", {}, l))),
 		),
-		el("button", { class: "secondary", style: { marginTop: ".5rem" }, on: { click: copySummary } }, "Copy summary"),
-	);
-}
-
-// ── Plain-English summary helpers ─────────────────────────────────────────
-function normalizeName(s) { return String(s).replace(/^[+\-*]/, "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""); }
-
-// ─── Sprite gallery view ─────────────────────────────────────────────────────
-function renderSpritesGallery() {
-	const wrap = el("div", {});
-	wrap.appendChild(el("div", { class: "card hero" },
-		el("h2", {}, "Sprite gallery"),
-		el("p", {}, "Every custom Pokémon's sprite at a glance. Click any tile to upload, replace, or remove. Mons without sprites are shown with a placeholder so they're easy to spot."),
-	));
-	const filter = { showMissingOnly: false, q: "" };
-	const card = el("div", { class: "card" });
-	wrap.appendChild(card);
-
-	const controls = el("div", { style: { display: "flex", gap: ".5rem", alignItems: "center", marginBottom: ".85rem", flexWrap: "wrap" } },
-		el("input", { type: "text", placeholder: "Search by name…", style: { maxWidth: "260px" }, on: { input: (e) => { filter.q = e.target.value; rebuild(); } } }),
-		el("label", { style: { display: "inline-flex", alignItems: "center", gap: ".35rem", fontWeight: 700, color: "#2a1a3a", fontSize: "9.5pt" } },
-			el("input", { type: "checkbox", style: { width: "auto" }, on: { change: (e) => { filter.showMissingOnly = e.target.checked; rebuild(); } } }),
-			el("span", {}, "Show missing only"),
-		),
-	);
-	card.appendChild(controls);
-	const grid = el("div", { class: "mon-grid" });
-	card.appendChild(grid);
-
-	function rebuild() {
-		empty(grid);
-		api("GET", "/api/sprites").then((r) => {
-			const all = (r.items || []).filter((s) => {
-				if (filter.showMissingOnly && s.hasSprite) return false;
-				if (filter.q && (s.name || "").toLowerCase().indexOf(filter.q.toLowerCase()) < 0) return false;
-				return true;
-			});
-			empty(grid);
-			if (all.length === 0) {
-				grid.appendChild(el("div", { class: "empty" }, el("div", { class: "big" }, "✨"), el("div", {}, "No mons match.")));
-				return;
-			}
-			for (const s of all) {
-				const tile = el("div", { class: "mon-card", on: { click: () => {
-					// Navigate to species editor with sprite tab open
-					// We use a tiny global state hop: set view to species and open the editor.
-					api("GET", "/api/species/" + encodeURIComponent(s.id)).then((res) => {
-						if (res && res.item) openEditorOnTab("species", res.item, "sprite");
-					}).catch(() => setToast("error", "Couldn't open " + s.id));
-				} } });
-				const spriteBox = el("div", { class: "sprite-box" });
-				if (s.hasSprite) {
-					const img = el("img", { src: adminApiPath("/api/species/" + encodeURIComponent(s.id) + "/sprite/preview?ts=" + Date.now()) });
-					img.onerror = () => { img.style.display = "none"; spriteBox.appendChild(el("div", { style: { fontSize: "2rem", opacity: ".3" } }, "?")); };
-					spriteBox.appendChild(img);
-				} else {
-					spriteBox.appendChild(el("div", { style: { fontSize: "1.8rem", opacity: ".4", color: "#a02020" } }, "—"));
-				}
-				tile.appendChild(spriteBox);
-				tile.appendChild(el("div", { class: "name" }, s.name || s.id));
-				tile.appendChild(el("div", { class: "types" },
-					...(s.types || []).map((t) => el("span", { class: "type-chip", style: { background: TYPE_COLORS[t] || "#888" } }, t))));
-				tile.appendChild(el("div", { class: "meta" }, s.hasSprite ? "Sprite: " + (s.ext || "ok") : "No sprite"));
-				grid.appendChild(tile);
-			}
-		}).catch((err) => {
-			empty(grid);
-			grid.appendChild(el("div", { class: "empty" }, "Couldn't load sprite list: " + (err.message || err)));
-		});
-	}
-	rebuild();
-	return wrap;
-}
-
-// ─── Advanced view (the rarely-used entity types) ────────────────────────────
-function renderAdvanced() {
-	return el("div", {},
-		el("div", { class: "card hero" },
-			el("h2", {}, "⚙️ Advanced"),
-			el("p", {}, "These are power-user tools. Most of the time you'll only need ", el("strong", {}, "Pokémon"), " and ", el("strong", {}, "Formats"), "."),
-		),
-		el("div", { class: "card" },
-			el("h2", {}, "Sections"),
-			el("div", { style: { display: "grid", gap: ".5rem", marginTop: ".5rem" } },
-				advancedTile("items", "🎒  Custom items", "Make held items like Pinkacord Berry."),
-				advancedTile("learnsets", "📚  Learnsets", "Manually edit which moves a Pokémon can learn. Auto-generated normally."),
-			),
-		),
-	);
-}
-function advancedTile(view, label, hint) {
-	return el("div", { style: { padding: ".75rem 1rem", background: "#faf6ff", borderRadius: "8px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }, on: { click: () => { location.hash = view; } } },
-		el("div", {},
-			el("div", { style: { fontWeight: 600, color: "#3a2a4a" } }, label),
-			el("div", { style: { fontSize: ".85rem", color: "#888" } }, hint),
-		),
-		el("div", { style: { color: "#b58cff" } }, "→"),
+		el("button", { class: "btn btn-quiet btn-sm", style: { marginTop: ".5rem" }, on: { click: copySummary } }, icon("copy", 13), "Copy summary"),
 	);
 }
 
 // ─── Audit / change log ──────────────────────────────────────────────────────
 function renderAudit() {
-	const wrap = el("div", { class: "card" }, el("h2", {}, "📜 Change log"));
-	const slot = el("div", { class: "audit-timeline" }, el("div", { class: "empty" }, "Loading…"));
-	wrap.appendChild(slot);
+	const wrap = el("div", {});
+	wrap.appendChild(el("div", { class: "page-head" },
+		el("div", {},
+			el("h1", {}, "Change log"),
+			el("div", { class: "sub" }, "Every save, delete, build, and deploy — who did what, when."),
+		),
+	));
+	const card = el("div", { class: "card" });
+	const slot = el("div", {}, el("div", { class: "empty" }, "Loading…"));
+	card.appendChild(slot);
+	wrap.appendChild(card);
 	api("GET", "/api/audit").then((r) => {
 		empty(slot);
-		if (r.entries.length === 0) {
+		if (!r.entries || r.entries.length === 0) {
 			slot.appendChild(el("div", { class: "empty" },
-				el("div", { class: "big" }, "📜"),
+				el("div", { class: "big" }, icon("scroll", 32)),
 				el("div", {}, "No changes yet. Once you save something, it'll show up here."),
 			));
 			return;
 		}
 		for (const e of r.entries) {
-			const icon = e.action.startsWith("auth") ? "🔑" : e.action.startsWith("publish") ? "🚀" : e.action.startsWith("build") ? "⚡" : e.action.startsWith("hotpatch") ? "🚀" : e.action.startsWith("sprite") ? "🎨" : e.action.includes("create") ? "✨" : e.action.includes("update") ? "✏️" : e.action.includes("delete") ? "🗑️" : "•";
 			slot.appendChild(el("div", { class: "audit-entry" },
-				el("div", { class: "icon" }, icon),
+				el("div", { class: "icon" }, icon(auditIconName(e.action), 15)),
 				el("div", { class: "body" },
 					el("div", { class: "top" },
-						el("div", {}, el("span", { class: "who" }, e.actor), el("span", { style: { color: "#888", marginLeft: ".4rem" } }, e.action), e.id ? el("span", { style: { color: "#b58cff", marginLeft: ".4rem" } }, e.id) : null),
-						el("div", { class: "ts" }, new Date(e.ts).toLocaleString()),
+						el("div", {},
+							el("span", { class: "who" }, e.actor),
+							el("span", { style: { color: "var(--dim)", marginLeft: ".4rem" } }, e.action),
+							e.id ? el("span", { class: "act-id", style: { marginLeft: ".4rem" } }, e.id) : null,
+						),
+						el("div", { class: "ts", title: new Date(e.ts).toLocaleString() }, relativeTime(e.ts)),
 					),
 				),
 			));
@@ -3171,11 +3323,6 @@ function renderAudit() {
 // ─── Actions ────────────────────────────────────────────────────────────────
 async function doBuildAndApply() {
 	if (state.hosted) return doPublishAndDeploy();
-	// Check for unsaved changes in an open editor modal
-	const openModal = $(".modal-overlay");
-	if (openModal) {
-		if (!confirm("You have an editor open with unsaved changes. Build will NOT include those changes.\n\nClose the editor first, then Save & Apply from there. Continue build anyway?")) return;
-	}
 	if (!confirm("Build and apply all pending changes to the live PS server?\n\nSaved changes will be compiled and hotpatched.")) return;
 	setToast("info", "Building…");
 	let buildResult;
@@ -3186,13 +3333,12 @@ async function doBuildAndApply() {
 		setToast("error", "Build failed: " + (err.message || "unknown error") + detail, 12000);
 		return;
 	}
-	const summary = " ✨ " + buildResult.stats.species + " Pokémon, ⚡ " + buildResult.stats.moves + " moves, 🔮 " + buildResult.stats.abilities + " abilities, 🏆 " + buildResult.stats.formats + " formats.";
+	const summary = " " + buildResult.stats.species + " Pokémon, " + buildResult.stats.moves + " moves, " + buildResult.stats.abilities + " abilities, " + buildResult.stats.formats + " formats.";
 	if (!state.botConfigured) {
 		state.pendingChanges = 0;
 		render();
-		// Send the user to Home so the deploy card is in front of them with copy-button.
 		if (state.view !== "home") location.hash = "home";
-		setToast("success", "Built." + summary + " Open Home → Deploy and copy the /hotpatch commands into PS chat to push live.", 14000);
+		setToast("success", "Built." + summary + " Open the Deploy card on the Dashboard and copy the /hotpatch commands into PS chat to push live.", 14000);
 		return;
 	}
 	setToast("info", "Build OK." + summary + " Hot-patching live server…");
@@ -3200,16 +3346,12 @@ async function doBuildAndApply() {
 		const hp = await api("POST", "/api/hotpatch");
 		state.pendingChanges = 0;
 		render();
-		setToast("success", "✓ Live!" + summary + " " + (hp.message || ""), 10000);
+		setToast("success", "Live!" + summary + " " + (hp.message || ""), 10000);
 	} catch (err) {
-		setToast("error", "Build OK but hotpatch failed: " + (err.message || "unknown") + ". Open Home → Deploy and paste the manual commands.", 12000);
+		setToast("error", "Build OK but hotpatch failed: " + (err.message || "unknown") + ". Open the Dashboard Deploy card and paste the manual commands.", 12000);
 	}
 }
 async function doPublishAndDeploy() {
-	const openModal = $(".modal-overlay");
-	if (openModal) {
-		if (!confirm("You have an editor open with unsaved changes. Publish will NOT include those changes.\n\nClose the editor first, then Save & Publish. Continue publish anyway?")) return;
-	}
 	if (!state.publishConfigured) {
 		setToast("error", "GitHub publish is not configured on the server. Add the GitHub env vars in Render first.", 10000);
 		return;
@@ -3235,16 +3377,24 @@ async function doPublishAndDeploy() {
 }
 async function doLogout() {
 	try { await api("POST", "/api/logout"); } catch {}
-	state.authed = false; state.displayName = null; location.hash = ""; renderRouted();
+	state.authed = false; state.displayName = null; state.editor = null; location.hash = ""; renderRouted();
 }
-async function confirmDelete(type, item) {
+async function confirmDelete(type, item, afterDelete) {
 	const name = item.data.name || item.data.species || item.id;
-	if (!confirm("Delete \"" + name + "\"?\n\nYou'll need to click " + (state.hosted ? "Publish" : "⚡ Apply") + " afterwards to push the deletion to the live server. The change is also recorded in the change log.")) return;
+	if (!confirm("Delete \"" + name + "\"?\n\nYou'll need to Deploy afterwards to push the deletion to the live server. The change is recorded in the change log.")) return;
 	try {
 		await api("DELETE", "/api/" + type + "/" + encodeURIComponent(item.id));
+		// Deleting a species also orphans its learnset entry — clean it up.
+		if (type === "species") {
+			const ls = (state.customLearnsets || []).find((l) => l.data && l.data.species === item.id);
+			if (ls) { try { await api("DELETE", "/api/learnsets/" + encodeURIComponent(ls.id)); } catch {} }
+			await refreshEntityCache("learnsets");
+		}
+		await refreshEntityCache(type);
 		markPendingChange();
-		setToast("success", "Deleted " + name + ". Click " + (state.hosted ? "Publish" : "⚡ Apply") + " when you're ready to push to live.");
-		render();
+		setToast("success", "Deleted " + name + ". Hit Deploy when you're ready to push to live.");
+		if (afterDelete) afterDelete();
+		else render();
 	} catch (err) {
 		const detail = err.fieldErrors && err.fieldErrors.length ? "\n\n" + err.fieldErrors.join("\n") : "";
 		setToast("error", (err.message || "delete failed") + detail, 9000);
