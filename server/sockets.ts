@@ -460,6 +460,7 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 				const targetPath = getAdminProxyPath(req.url) || '/';
 				const headers = { ...req.headers };
 				delete headers.host;
+				headers['x-pinkacord-admin-prefix'] = '/admin';
 				const proxyReq = http.request({
 					hostname: '127.0.0.1',
 					port: ADMIN_PORT,

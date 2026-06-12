@@ -111,9 +111,13 @@ function requireAuth(req: http.IncomingMessage): { sid: string; displayName: str
 function requireCsrf(req: http.IncomingMessage): boolean {
 	return req.headers["x-pinkacord-admin"] === "1";
 }
-function makeSetCookie(sid: string | ""): string {
-	if (sid === "") return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
-	return `${SESSION_COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`;
+function adminCookiePath(req: http.IncomingMessage): "/" | "/admin" {
+	return req.headers["x-pinkacord-admin-prefix"] === "/admin" ? "/admin" : "/";
+}
+function makeSetCookie(req: http.IncomingMessage, sid: string | ""): string {
+	const path = adminCookiePath(req);
+	if (sid === "") return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=${path}; Max-Age=0`;
+	return `${SESSION_COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=${path}; Max-Age=43200`;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -172,7 +176,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 		}
 		const displayName = (typeof body.displayName === "string" && body.displayName.trim()) ? body.displayName.trim().slice(0, 40) : "admin";
 		const sid = createSession(displayName);
-		res.setHeader("Set-Cookie", makeSetCookie(sid));
+		res.setHeader("Set-Cookie", makeSetCookie(req, sid));
 		appendAudit({ actor: displayName, action: "auth.login", meta: { ip } });
 		return sendJson(res, 200, { ok: true, displayName });
 	}
@@ -180,7 +184,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 	if (method === "POST" && pathname === "/api/logout") {
 		const sid = parseCookies(req.headers.cookie)[SESSION_COOKIE];
 		destroySession(sid);
-		res.setHeader("Set-Cookie", makeSetCookie(""));
+		res.setHeader("Set-Cookie", makeSetCookie(req, ""));
 		return sendJson(res, 200, { ok: true });
 	}
 

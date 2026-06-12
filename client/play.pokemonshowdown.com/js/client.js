@@ -255,6 +255,7 @@ function toId() {
 			} else if (assertion === ';;@gmail') {
 				this.trigger('login:authrequired', name, '@gmail');
 			} else if (assertion.substr(0, 2) === ';;') {
+				this.setPersistentName(null);
 				this.trigger('login:invalidname', name, assertion.substr(2));
 			} else if (assertion.indexOf('\n') >= 0 || !assertion) {
 				app.addPopupMessage("Something is interfering with our connection to the login server.");
@@ -380,7 +381,8 @@ function toId() {
 		setPersistentName: function (name) {
 			if (location.host !== Config.routes.client) return;
 			$.cookie('showdown_username', (name !== undefined) ? name : this.get('name'), {
-				expires: 14
+				expires: 14,
+				path: '/'
 			});
 		}
 	});
