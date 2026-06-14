@@ -250,7 +250,7 @@ function toId() {
 				app.addPopupMessage("Something is interfering with our connection to the login server. Most likely, your internet provider needs you to re-log-in, or your internet provider is blocking Pokémon Showdown.");
 				return;
 			}
-			if (assertion === ';') {
+			if (assertion === ';' || assertion === ';;Your username is no longer available.') {
 				this.trigger('login:authrequired', name);
 			} else if (assertion === ';;@gmail') {
 				this.trigger('login:authrequired', name, '@gmail');

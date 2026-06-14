@@ -767,7 +767,7 @@ if(assertion.includes('<')){
 PS.alert("Something is interfering with our connection to the login server. Most likely, your internet provider needs you to re-log-in, or your internet provider is blocking Pokémon Showdown.");
 return;
 }
-if(assertion===';'){
+if(assertion===';'||assertion===';;Your username is no longer available.'){
 this.updateLogin({name:name,needsPassword:true});
 }else if(assertion===';;@gmail'){
 this.updateLogin({name:name,needsGoogle:true});
