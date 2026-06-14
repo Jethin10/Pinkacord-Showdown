@@ -28,8 +28,8 @@ export interface PSElements extends preact.JSX.IntrinsicElements {
 	spotify: { src: string };
 	username: { name?: string, class?: string, children?: preact.VNode | string };
 	psicon: { pokemon: string } | { item: string } | { type: string } | { category: string };
-	center: { class?: string };
-	font: { size?: string, color?: string };
+	center: { class?: string, children?: preact.ComponentChildren };
+	font: { size?: string, color?: string, children?: preact.ComponentChildren };
 }
 
 export { render };

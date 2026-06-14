@@ -79,10 +79,29 @@ Main's SSL deploy script from Let's Encrypt looks like:
  *   This can be either false (meaning not to trust any proxies) or an array
  *   of strings. Each string should be either an IP address or a subnet given
  *   in CIDR notation. You should usually leave this as `false` unless you
- *   know what you are doing
+ *   know what you are doing.
+ *
+ * Pinkacord's Render/Fly-style hosted deployments sit behind a platform
+ * reverse proxy. If we do not trust that proxy, every player appears to have
+ * the proxy's IP, and matchmaking refuses to pair anyone because it thinks
+ * all searches are from the same IP.
  * @type {false | string[]}.
  */
-exports.proxyip = false;
+const PINKACORD_HOSTED = ['1', 'true', 'yes'].includes(
+	(process.env.PINKACORD_HOSTED || '').toLowerCase()
+);
+const PINKACORD_PROXY_IPS = (process.env.PINKACORD_PROXY_IPS || '')
+	.split(',')
+	.map(ip => ip.trim())
+	.filter(Boolean);
+exports.proxyip = PINKACORD_PROXY_IPS.length ? PINKACORD_PROXY_IPS : (
+	PINKACORD_HOSTED ? [
+		'127.0.0.0/8',
+		'10.0.0.0/8',
+		'172.16.0.0/12',
+		'192.168.0.0/16',
+	] : false
+);
 
 // subprocesses - the number of child processes to use for various tasks.
 //   Set to 0 to run everything in the main process (saves RAM on constrained hosts).

@@ -96,6 +96,21 @@ describe('Matchmaker', () => {
 		}
 	});
 
+	it('should match Pinkacord random battles through the search path', async function () {
+		this.p1.battleSettings.team = '';
+		this.p2.battleSettings.team = '';
+
+		await Ladders('pinkacordrandombattle').searchBattle(this.p1, this.p1.connections[0]);
+		assert.deepEqual(Ladders.getSearches(this.p1), ['pinkacordrandombattle']);
+
+		await Ladders('pinkacordrandombattle').searchBattle(this.p2, this.p2.connections[0]);
+		assert.equal(this.p1.games.size, 1);
+
+		const [roomid] = this.p1.games;
+		assert.equal(Rooms.get(roomid).battle.format, 'pinkacordrandombattle');
+		Rooms.get(roomid).destroy();
+	});
+
 	it('should cancel search on disconnect', function () {
 		addSearch(this.p1);
 		this.p1.onDisconnect(this.p1.connections[0]);

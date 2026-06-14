@@ -2,6 +2,7 @@
 
 const assert = require('../assert');
 const { extractChannelMessages } = require('../../dist/sim/battle');
+const { resolveSocketIp } = require('../../dist/server/sockets');
 
 describe('ServerStream', () => {
 	const omniscientPlayer = -1;
@@ -216,6 +217,30 @@ describe('ServerStream', () => {
 			assert.equal(actualChannelMessages[3].join('\n'), '');
 			assert.equal(actualChannelMessages[4].join('\n'), '');
 			assert.equal(actualChannelMessages[spectatorPlayer].join('\n'), '');
+		});
+	});
+
+	describe('resolveSocketIp', () => {
+		const trustedPrivateProxy = ip => (
+			ip === '127.0.0.1' ||
+			ip.startsWith('10.') ||
+			ip.startsWith('192.168.')
+		);
+
+		it('should keep the socket IP when the peer is not a trusted proxy', () => {
+			const ip = resolveSocketIp('203.0.113.10', {
+				'x-forwarded-for': '198.51.100.20',
+			}, trustedPrivateProxy);
+
+			assert.equal(ip, '203.0.113.10');
+		});
+
+		it('should use the nearest untrusted forwarded IP behind a trusted proxy', () => {
+			const ip = resolveSocketIp('10.0.0.8', {
+				'x-forwarded-for': '198.51.100.20, 10.0.0.9',
+			}, trustedPrivateProxy);
+
+			assert.equal(ip, '198.51.100.20');
 		});
 	});
 });

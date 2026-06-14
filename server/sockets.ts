@@ -24,6 +24,27 @@ import { getAdminProxyPath } from './pinkacord-admin-proxy';
 
 type StreamWorker = ProcessManager.StreamWorker;
 
+export function resolveSocketIp(
+	remoteAddress: string,
+	headers: { [key: string]: string | string[] | undefined },
+	isTrustedProxyIp: (ip: string) => boolean
+) {
+	let socketip = remoteAddress;
+	if (!isTrustedProxyIp(socketip)) return socketip;
+
+	const forwardedFor = headers['x-forwarded-for'];
+	const forwardedForText = Array.isArray(forwardedFor) ? forwardedFor.join(',') : (forwardedFor || '');
+	const ips = forwardedForText.split(',').reverse();
+	for (const ip of ips) {
+		const proxy = ip.trim();
+		if (proxy && !isTrustedProxyIp(proxy)) {
+			socketip = proxy;
+			break;
+		}
+	}
+	return socketip;
+}
+
 export const Sockets = new class {
 	async onSpawn(worker: StreamWorker) {
 		const id = worker.workerid;
@@ -344,7 +365,7 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 			const staticServer = new StaticServer('./server/static');
 			const actionPhpRegex = /^(?:\/~~[A-Za-z0-9-]+)?\/action\.php(?:\?|$)/;
 			const proxyLogin = (req: http.IncomingMessage, res: http.ServerResponse) => {
-				const https = require('https') as typeof import('https');
+				const httpsModule = require('https') as typeof import('https');
 				const url = req.url || '';
 				const qIdx = url.indexOf('?');
 				const upstreamPath = '/api/' + (qIdx >= 0 ? url.slice(qIdx) : '');
@@ -352,7 +373,7 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 				req.on('data', (c: Buffer) => chunks.push(c));
 				req.on('end', () => {
 					const body = Buffer.concat(chunks);
-					const proxyReq = https.request({
+					const proxyReq = httpsModule.request({
 						method: req.method,
 						hostname: 'play.pokemonshowdown.com',
 						path: upstreamPath,
@@ -619,17 +640,7 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 		const socketid = `${++this.socketCounter}`;
 		this.sockets.set(socketid, socket);
 
-		let socketip = socket.remoteAddress;
-		if (this.isTrustedProxyIp(socketip)) {
-			const ips = (socket.headers['x-forwarded-for'] || '').split(',').reverse();
-			for (const ip of ips) {
-				const proxy = ip.trim();
-				if (!this.isTrustedProxyIp(proxy)) {
-					socketip = proxy;
-					break;
-				}
-			}
-		}
+		const socketip = resolveSocketIp(socket.remoteAddress, socket.headers, this.isTrustedProxyIp);
 
 		this.push(`*${socketid}\n${socketip}\n${socket.protocol}`);
 

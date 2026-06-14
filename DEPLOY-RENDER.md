@@ -107,5 +107,6 @@ Render free tier supports WebSockets. Players can battle in real-time.
 | Build fails | Check Render logs, make sure all files are committed |
 | Server sleeps | UptimeRobot should ping /health every 5 min |
 | Can't connect | Use `https://` not `http://`, no port number |
+| Matchmaking never pairs users | Make sure `PINKACORD_HOSTED=1` is set so forwarded player IPs are trusted |
 | Admin panel not accessible | Run locally: `npm run pinkacord-admin` |
 | Changes lost after restart | Content is baked in at build time — push to GitHub to persist |

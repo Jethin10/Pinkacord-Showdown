@@ -2,6 +2,8 @@
 
 type GroupSymbol = import('./user-groups').GroupSymbol;
 type AuthLevel = import('./user-groups').AuthLevel;
+type PSIntrinsicElements = import('./chat-jsx').PSElements;
+type PSVNode = import('preact').VNode<any>;
 
 /** not actually guaranteed to be one of these */
 type PunishType = '#hostfilter' | '#dnsbl' | '#ipban';
@@ -55,7 +57,15 @@ declare namespace Rooms {
 }
 
 declare namespace JSX {
-	export type IntrinsicElements = import('./chat-jsx').PSElements;
+	export type Element = PSVNode;
+	export type ElementClass = import('preact').Component<any, any> | import('preact').FunctionComponent<any>;
+	export interface ElementAttributesProperty {
+		props: any;
+	}
+	export interface ElementChildrenAttribute {
+		children: any;
+	}
+	export type IntrinsicElements = PSIntrinsicElements;
 }
 
 // Users

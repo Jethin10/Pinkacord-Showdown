@@ -295,7 +295,7 @@ export class MainMenuRoom extends PSRoom {
 				if (isTeambuilderFormat) {
 					teambuilderFormatName = name;
 					if (!id.startsWith('gen')) {
-						teambuilderFormatName = '[Gen 6] ' + name;
+						teambuilderFormatName = `[Gen ${Dex.gen}] ${name}`;
 					}
 					let parenPos = teambuilderFormatName.indexOf('(');
 					if (parenPos > 0 && name.endsWith(')')) {

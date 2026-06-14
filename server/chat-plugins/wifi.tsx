@@ -746,7 +746,7 @@ export class GTS extends Rooms.SimpleRoomGame {
 	giver: User;
 	left: number;
 	summary: string;
-	deposit: string;
+	deposit: string | Chat.VNode;
 	lookfor: string;
 	pokemonID: ID;
 	sprite: Chat.VNode;
@@ -778,12 +778,12 @@ export class GTS extends Rooms.SimpleRoomGame {
 		this.send(this.generateWindow());
 	}
 
-	send(content: string) {
+	send(content: string | Chat.VNode) {
 		this.room.add(Chat.html`|uhtml|gtsga${this.gtsNumber}|${<div class="broadcast-blue">{content}</div>}`);
 		this.room.update();
 	}
 
-	changeUhtml(content: string) {
+	changeUhtml(content: string | Chat.VNode) {
 		this.room.uhtmlchange(`gtsga${this.gtsNumber}`, Chat.html`${<div class="broadcast-blue">{content}</div>}`);
 		this.room.update();
 	}
@@ -795,7 +795,7 @@ export class GTS extends Rooms.SimpleRoomGame {
 		}
 	}
 
-	generateWindow() {
+	generateWindow(): Chat.VNode {
 		const sentModifier = this.sent.length ? 5 : 0;
 		const rightSide = this.noDeposits ?
 			<strong>
@@ -815,7 +815,7 @@ export class GTS extends Rooms.SimpleRoomGame {
 				<tr>
 					{!!sentModifier && <td style={{ textAlign: 'center', width: '10%' }}>
 						<b>Last winners:</b><br />
-						{this.sent.join(<br />)}
+						{this.sent.map((name, i) => <>{i ? <br /> : null}{name}</>)}
 					</td>}
 					<td style={{ textAlign: 'center', width: '15%' }}>{this.sprite}</td>
 					<td style={{ textAlign: 'center', width: `${40 - sentModifier}%` }}>
@@ -883,7 +883,7 @@ export class GTS extends Rooms.SimpleRoomGame {
 	// This currently doesn't match some of the edge cases the other pokemon matching function does account for
 	// (such as Type: Null). However, this should never be used as a fodder mon anyway,
 	// so I don't see a huge need to implement it.
-	static linkify(text: string) {
+	static linkify(text: string): string | Chat.VNode {
 		const parsed = toID(text);
 
 		for (const species of Dex.species.all()) {
@@ -1428,7 +1428,7 @@ export const commands: Chat.ChatCommands = {
 			if (!wifiData.whitelist.length) {
 				buf.push(<div class="message-error">None.</div>);
 			} else {
-				buf.push(wifiData.whitelist.map(n => <username>{n}</username>));
+				buf.push(...wifiData.whitelist.map(n => <username>{n}</username>));
 			}
 			this.sendReplyBox(<>{buf}</>);
 		},
