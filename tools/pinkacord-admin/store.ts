@@ -52,10 +52,10 @@ const writeLock = new (class {
 		}
 	}
 
-	async withLock<T>(fn: () => T): Promise<T> {
+	async withLock<T>(fn: () => T | Promise<T>): Promise<T> {
 		await this.acquire();
 		try {
-			return fn();
+			return await fn();
 		} finally {
 			this.release();
 		}
@@ -313,7 +313,7 @@ function normalizeAndCrossRef(type: EntityType, body: any): { body: any; issues:
 	return { body: normalized, issues };
 }
 
-export function create(type: EntityType, body: unknown, actor: string): ListedItem {
+export async function create(type: EntityType, body: unknown, actor: string): Promise<ListedItem> {
 	const cfg = ENTITIES[type];
 	const norm = normalizeAndCrossRef(type, body);
 	if (norm.issues.length) throw new StoreError("validation", "Couldn't save — fix these first:", norm.issues);
@@ -321,7 +321,7 @@ export function create(type: EntityType, body: unknown, actor: string): ListedIt
 	if (!parsed.success) throw new StoreError("validation", "invalid body", zodToFieldErrors(parsed.error));
 
 	const newId = cfg.keyOf(parsed.data);
-	writeLock.withLock(() => {
+	await writeLock.withLock(() => {
 		const file = readFile(cfg.filePath);
 		if (file.items.some((it) => cfg.keyOf(it) === newId)) {
 			throw new StoreError("conflict", `${type}/${newId} already exists`);
@@ -333,7 +333,7 @@ export function create(type: EntityType, body: unknown, actor: string): ListedIt
 	return { id: newId, _rev: revOf(parsed.data), data: parsed.data };
 }
 
-export function update(type: EntityType, id: string, body: unknown, ifMatchRev: string | undefined, actor: string): ListedItem {
+export async function update(type: EntityType, id: string, body: unknown, ifMatchRev: string | undefined, actor: string): Promise<ListedItem> {
 	const cfg = ENTITIES[type];
 	const norm = normalizeAndCrossRef(type, body);
 	if (norm.issues.length) throw new StoreError("validation", "Couldn't save — fix these first:", norm.issues);
@@ -345,7 +345,7 @@ export function update(type: EntityType, id: string, body: unknown, ifMatchRev: 
 		// Treat that as delete+create to keep keys in sync with the new name.
 		if (type === "species") {
 			const newId = cfg.keyOf(parsed.data);
-			writeLock.withLock(() => {
+			await writeLock.withLock(() => {
 				const file = readFile(cfg.filePath);
 				const idx = file.items.findIndex((it) => cfg.keyOf(it) === id);
 				if (idx < 0) throw new StoreError("not_found", `${type}/${id}`);
@@ -372,7 +372,7 @@ export function update(type: EntityType, id: string, body: unknown, ifMatchRev: 
 		throw new StoreError("validation", `id in URL (${id}) does not match id in body (${cfg.keyOf(parsed.data)})`);
 	}
 
-	writeLock.withLock(() => {
+	await writeLock.withLock(() => {
 		const file = readFile(cfg.filePath);
 		const idx = file.items.findIndex((it) => cfg.keyOf(it) === id);
 		if (idx < 0) throw new StoreError("not_found", `${type}/${id}`);
@@ -387,9 +387,9 @@ export function update(type: EntityType, id: string, body: unknown, ifMatchRev: 
 	return { id, _rev: revOf(parsed.data), data: parsed.data };
 }
 
-export function remove(type: EntityType, id: string, ifMatchRev: string | undefined, actor: string): void {
+export async function remove(type: EntityType, id: string, ifMatchRev: string | undefined, actor: string): Promise<void> {
 	const cfg = ENTITIES[type];
-	writeLock.withLock(() => {
+	await writeLock.withLock(() => {
 		const file = readFile(cfg.filePath);
 		const idx = file.items.findIndex((it) => cfg.keyOf(it) === id);
 		if (idx < 0) throw new StoreError("not_found", `${type}/${id}`);

@@ -1165,18 +1165,37 @@ function moveNameOf(id) {
 	for (const m of state.psMoves || []) { if (m.id === norm) return m.name; }
 	return id;
 }
+function uniqueDraftName(base, items) {
+	const used = new Set((items || []).map((it) => moveIdOf((it.data && (it.data.name || it.data.id)) || it.id || "")));
+	let name = base;
+	let i = 2;
+	while (used.has(moveIdOf(name))) name = base + " " + i++;
+	return name;
+}
+function nextDraftNum(items, floor) {
+	let max = floor - 1;
+	for (const it of items || []) {
+		const n = Number(it.data && it.data.num);
+		if (Number.isFinite(n) && n >= floor && n > max) max = n;
+	}
+	return max + 1;
+}
+function defaultSpeciesEntity() {
+	const name = uniqueDraftName("New Pokemon", state.customSpecies);
+	return {
+		id: moveIdOf(name), num: nextDraftNum(state.customSpecies, 10001), name, types: ["Normal"],
+		baseStats: { hp: 80, atk: 80, def: 80, spa: 80, spd: 80, spe: 80 },
+		abilities: { "0": "Run Away" }, heightm: 1, weightkg: 10, color: "Pink",
+		eggGroups: ["Field"], tier: "OU", doublesTier: "DOU",
+	};
+}
 
 function openSpeciesEditor(existing) {
 	// Duplicate flow passes { id: "", _rev: null, data: {...} } — treat as new w/ prefill.
 	const looksLikeNewWithPrefill = existing && (!existing.id || !existing._rev) && existing.data;
 	let prefill = null;
 	if (looksLikeNewWithPrefill) { prefill = deepClone(existing.data); existing = null; }
-	const data = existing ? deepClone(existing.data) : (prefill || {
-		id: "", num: 10001, name: "", types: ["Normal"],
-		baseStats: { hp: 80, atk: 80, def: 80, spa: 80, spd: 80, spe: 80 },
-		abilities: { "0": "" }, heightm: 1, weightkg: 10, color: "Pink",
-		eggGroups: ["Field"], tier: "OU", doublesTier: "DOU",
-	});
+	const data = existing ? deepClone(existing.data) : (prefill || defaultSpeciesEntity());
 	// Learnset: merged into this editor. Load the existing entry if any.
 	let lsItem = null;
 	if (existing) {
@@ -1785,10 +1804,22 @@ function entityTitle(type) {
 	return t[type] || type;
 }
 function defaultEntity(type) {
-	if (type === "moves") return { id: "", num: 9001, name: "", type: "Normal", category: "Special", basePower: 80, accuracy: 100, pp: 15, priority: 0, target: "normal", shortDesc: "", flags: {} };
-	if (type === "abilities") return { id: "", name: "", shortDesc: "", effects: [] };
-	if (type === "items") return { id: "", num: 9001, name: "", shortDesc: "", effects: [] };
-	if (type === "formats") return { id: "", name: "[Pinkacord] ", mod: "pinkacord", section: "Pinkacord", column: 1, desc: "", gameType: "singles", ruleset: ["Standard"], banlist: [], unbanlist: [], sharedPower: false, enabled: true };
+	if (type === "moves") {
+		const name = uniqueDraftName("New Move", state.customMoves);
+		return { id: moveIdOf(name), num: nextDraftNum(state.customMoves, 9001), name, type: "Normal", category: "Special", basePower: 80, accuracy: 100, pp: 15, priority: 0, target: "normal", shortDesc: "A custom move.", flags: {} };
+	}
+	if (type === "abilities") {
+		const name = uniqueDraftName("New Ability", state.customAbilities);
+		return { id: moveIdOf(name), name, shortDesc: "A custom ability.", effects: [] };
+	}
+	if (type === "items") {
+		const name = uniqueDraftName("New Item", state.customItems);
+		return { id: moveIdOf(name), num: nextDraftNum(state.customItems, 9001), name, shortDesc: "A custom held item.", effects: [] };
+	}
+	if (type === "formats") {
+		const name = uniqueDraftName("[Pinkacord] New Format", state.customFormats);
+		return { id: moveIdOf(name), name, mod: "pinkacord", section: "Pinkacord", column: 1, desc: "A custom Pinkacord format.", gameType: "singles", ruleset: ["Standard"], banlist: [], unbanlist: [], sharedPower: false, enabled: true };
+	}
 	return {};
 }
 

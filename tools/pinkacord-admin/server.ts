@@ -413,19 +413,19 @@ async function handleEntity(req: http.IncomingMessage, res: http.ServerResponse,
 		if (method === "POST" && id == null) {
 			const body = JSON.parse(await readBody(req));
 			delete body.__rev;
-			const created = create(type, body, actor);
+			const created = await create(type, body, actor);
 			return sendJson(res, 201, { ok: true, item: created });
 		}
 		if (method === "PUT" && id != null) {
 			const body = JSON.parse(await readBody(req));
 			const ifMatch = (req.headers["if-match"] as string | undefined) || body.__rev;
 			delete body.__rev;
-			const updated = update(type, id, body, ifMatch, actor);
+			const updated = await update(type, id, body, ifMatch, actor);
 			return sendJson(res, 200, { ok: true, item: updated });
 		}
 		if (method === "DELETE" && id != null) {
 			const ifMatch = req.headers["if-match"] as string | undefined;
-			remove(type, id, ifMatch, actor);
+			await remove(type, id, ifMatch, actor);
 			return sendJson(res, 200, { ok: true });
 		}
 		return sendJson(res, 405, { ok: false, code: "method_not_allowed", message: method });
@@ -513,7 +513,8 @@ function handleSpritePreview(res: http.ServerResponse, speciesId: string) {
 			return;
 		}
 	}
-	res.statusCode = 404;
+	res.statusCode = 204;
+	res.setHeader("Cache-Control", "no-store");
 	res.end();
 }
 
