@@ -78,6 +78,18 @@ export type StatBlock = z.infer<typeof StatBlockSchema>;
 
 const TypeSchema = z.enum(POKEMON_TYPES);
 const StatusSchema = z.enum(STATUS_IDS);
+const BoostStageSchema = z.number().int().min(-6).max(6);
+const BoostRecordSchema = z.object({
+	hp: BoostStageSchema.optional(),
+	atk: BoostStageSchema.optional(),
+	def: BoostStageSchema.optional(),
+	spa: BoostStageSchema.optional(),
+	spd: BoostStageSchema.optional(),
+	spe: BoostStageSchema.optional(),
+}).strict().refine(
+	(boosts) => Object.values(boosts).some((v) => v !== undefined),
+	{ message: "boosts must include at least one stat" },
+);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Pokemon (pokedex + formats-data combined)
@@ -123,7 +135,7 @@ const SecondaryEffectSchema = z.object({
 	chance: z.number().int().min(1).max(100),
 	status: StatusSchema.optional(),
 	volatileStatus: z.enum(["confusion", "flinch"]).optional(),
-	boosts: z.record(z.enum(STAT_IDS), z.number().int().min(-6).max(6)).optional(),
+	boosts: BoostRecordSchema.optional(),
 }).refine(
 	(s) => s.status || s.volatileStatus || s.boosts,
 	{ message: "secondary effect must specify status, volatileStatus, or boosts" },
@@ -170,7 +182,7 @@ export const MoveSchema = z.object({
 	recoil: z.tuple([z.number().int().positive(), z.number().int().positive()]).optional(),
 	/** Boost user's own stats after using the move. */
 	selfBoost: z.object({
-		boosts: z.record(z.enum(STAT_IDS), z.number().int().min(-6).max(6)),
+		boosts: BoostRecordSchema,
 	}).optional(),
 	multihit: z.union([
 		z.number().int().min(2).max(10),

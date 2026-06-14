@@ -67,6 +67,25 @@ describe('Pinkacord admin UI defaults', () => {
 			assert(data.id, `${type} id should be prefilled`);
 		}
 	});
+
+	it('exposes every supported move mechanic in the move editor', () => {
+		const source = extractFunction(SCRIPT, 'renderMoveFormAdvanced', 'effectParamControl');
+		const haystack = source + SCRIPT;
+		for (const label of [
+			'Target', 'Contest type', 'Long description', 'Secondary effect',
+			'Drain', 'Recoil', 'Self boosts', 'Multihit', 'Crit ratio',
+			'recharge', 'snatch', 'gravity', 'defrost', 'metronome', 'wind',
+		]) {
+			assert(haystack.includes(label), `move editor should expose ${label}`);
+		}
+	});
+
+	it('uses typed controls for effect parameters', () => {
+		const source = extractBlock(SCRIPT, 'function effectParamControl', 'function renderAbilityForm');
+		for (const text of ['type', 'status', 'weather', 'terrain', 'stat', 'category', 'fraction', 'multiplier']) {
+			assert(source.includes(text), `effect parameter controls should recognize ${text}`);
+		}
+	});
 });
 
 describe('Pinkacord admin store writes', () => {
@@ -101,6 +120,45 @@ describe('Pinkacord admin store writes', () => {
 		await result;
 		const file = JSON.parse(fs.readFileSync(path.join(tmpDir, 'content/pinkacord/items.json'), 'utf8'));
 		assert(file.items.some(item => item.id === 'awaiteditem'));
+	});
+
+	it('saves advanced move mechanics without dropping fields', async () => {
+		const store = require('../../dist/tools/pinkacord-admin/store');
+		await store.create('moves', {
+			id: 'advancedstrike',
+			num: 9998,
+			name: 'Advanced Strike',
+			type: 'Fairy',
+			category: 'Physical',
+			basePower: 90,
+			accuracy: 95,
+			pp: 10,
+			priority: 1,
+			target: 'adjacentFoe',
+			shortDesc: 'Exercises every advanced move editor field.',
+			desc: 'Has drain, recoil, a secondary effect, self boosts, multihit, and advanced flags.',
+			flags: { contact: 1, protect: 1, recharge: 1, wind: 1 },
+			secondary: { chance: 30, status: 'par', boosts: { def: -1 } },
+			drain: [1, 2],
+			recoil: [1, 3],
+			selfBoost: { boosts: { atk: 1 } },
+			multihit: [2, 5],
+			critRatio: 2,
+			contestType: 'Cool',
+		}, 'test');
+
+		const file = JSON.parse(fs.readFileSync(path.join(tmpDir, 'content/pinkacord/moves.json'), 'utf8'));
+		const saved = file.items.find(move => move.id === 'advancedstrike');
+		assert(saved, 'advanced move should be written');
+		assert.deepEqual(saved.secondary, { chance: 30, status: 'par', boosts: { def: -1 } });
+		assert.deepEqual(saved.drain, [1, 2]);
+		assert.deepEqual(saved.recoil, [1, 3]);
+		assert.deepEqual(saved.selfBoost, { boosts: { atk: 1 } });
+		assert.deepEqual(saved.multihit, [2, 5]);
+		assert.equal(saved.target, 'adjacentFoe');
+		assert.equal(saved.contestType, 'Cool');
+		assert.equal(saved.flags.recharge, 1);
+		assert.equal(saved.flags.wind, 1);
 	});
 });
 

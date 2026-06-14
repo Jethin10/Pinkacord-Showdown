@@ -613,6 +613,13 @@ const TIERS = ["AG", "Uber", "OU", "UUBL", "UU", "RUBL", "RU", "NUBL", "NU", "PU
 const DOUBLES_TIERS = ["DUber", "DOU", "DBL", "DUU", "(DUU)", "NFE", "LC"];
 const STATS = ["hp", "atk", "def", "spa", "spd", "spe"];
 const STAT_NAMES = { hp: "HP", atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe" };
+const MOVE_TARGETS = ["normal", "self", "adjacentAlly", "adjacentAllyOrSelf", "adjacentFoe", "allAdjacent", "allAdjacentFoes", "allies", "allySide", "allyTeam", "any", "foeSide", "scripted", "randomNormal", "all", "allSides"];
+const MOVE_FLAGS = ["contact", "protect", "mirror", "sound", "punch", "bite", "slicing", "bullet", "powder", "heal", "recharge", "snatch", "gravity", "defrost", "metronome", "wind"];
+const MOVE_STATUS_IDS = ["brn", "par", "slp", "frz", "psn", "tox"];
+const MOVE_VOLATILES = ["confusion", "flinch"];
+const MOVE_CONTEST_TYPES = ["Cool", "Beautiful", "Cute", "Clever", "Tough"];
+const WEATHER_IDS = ["sunnyday", "raindance", "sandstorm", "snow", "hail"];
+const TERRAIN_IDS = ["electricterrain", "grassyterrain", "mistyterrain", "psychicterrain"];
 function statColor(v) {
 	if (v < 50) return "#f87171";
 	if (v < 80) return "#fb923c";
@@ -1960,7 +1967,7 @@ function openDrawer(type, existing) {
 	const bodySlot = el("div", { class: "modal-body" });
 	bodySlot.appendChild(errSlot);
 	bodySlot.appendChild(
-		type === "moves" ? renderMoveForm(data) :
+		type === "moves" ? renderMoveFormAdvanced(data) :
 		type === "abilities" ? renderAbilityForm(data) :
 		type === "items" ? renderItemForm(data) :
 		el("div", {}, "Unknown entity type"),
@@ -2074,6 +2081,235 @@ function renderMoveForm(d) {
 }
 
 // ─── Ability form (effects registry + AI designer) ───────────────────────────
+function optionalNumberControl(d, key, defaults) {
+	defaults = defaults || {};
+	const enabled = d[key] !== undefined && d[key] !== null;
+	const input = el("input", { type: "number", value: enabled ? d[key] : (defaults.value || ""), min: defaults.min, max: defaults.max, disabled: !enabled, on: { input: (e) => { d[key] = Number(e.target.value); } } });
+	const cb = el("input", { type: "checkbox", checked: enabled, style: { width: "auto" }, on: { change: (e) => {
+		if (e.target.checked) { d[key] = Number(input.value || defaults.value || 1); input.disabled = false; }
+		else { delete d[key]; input.disabled = true; }
+	} } });
+	return el("div", { style: { display: "flex", gap: ".6rem", alignItems: "center" } },
+		el("label", { style: { display: "inline-flex", gap: ".3rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)", whiteSpace: "nowrap" } }, cb, "Enable"),
+		input,
+		defaults.suffix ? el("span", { class: "hint" }, defaults.suffix) : null,
+	);
+}
+function ratioControl(d, key, fallback) {
+	const enabled = Array.isArray(d[key]);
+	const cur = enabled ? d[key] : fallback;
+	const num = el("input", { type: "number", value: cur[0], min: 1, max: 99, disabled: !enabled, on: { input: (e) => { if (!Array.isArray(d[key])) d[key] = fallback.slice(); d[key][0] = Number(e.target.value); } } });
+	const den = el("input", { type: "number", value: cur[1], min: 1, max: 99, disabled: !enabled, on: { input: (e) => { if (!Array.isArray(d[key])) d[key] = fallback.slice(); d[key][1] = Number(e.target.value); } } });
+	const cb = el("input", { type: "checkbox", checked: enabled, style: { width: "auto" }, on: { change: (e) => {
+		if (e.target.checked) { d[key] = fallback.slice(); num.disabled = false; den.disabled = false; num.value = d[key][0]; den.value = d[key][1]; }
+		else { delete d[key]; num.disabled = true; den.disabled = true; }
+	} } });
+	return el("div", { style: { display: "flex", gap: ".45rem", alignItems: "center", flexWrap: "wrap" } },
+		el("label", { style: { display: "inline-flex", gap: ".3rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)" } }, cb, "Enable"),
+		num, el("span", { class: "hint" }, "out of"), den,
+	);
+}
+function multihitControl(d) {
+	const isRange = Array.isArray(d.multihit);
+	const enabled = !!d.multihit;
+	const mode = el("select", { disabled: !enabled, on: { change: sync } },
+		el("option", { value: "fixed", selected: enabled && !isRange }, "Fixed hits"),
+		el("option", { value: "range", selected: isRange }, "Hit range"),
+	);
+	const first = el("input", { type: "number", min: 2, max: 10, value: isRange ? d.multihit[0] : (d.multihit || 2), disabled: !enabled, on: { input: sync } });
+	const second = el("input", { type: "number", min: 2, max: 10, value: isRange ? d.multihit[1] : 5, disabled: !enabled || mode.value !== "range", on: { input: sync } });
+	const cb = el("input", { type: "checkbox", checked: enabled, style: { width: "auto" }, on: { change: (e) => {
+		if (e.target.checked) { d.multihit = 2; mode.disabled = false; first.disabled = false; second.disabled = mode.value !== "range"; }
+		else { delete d.multihit; mode.disabled = true; first.disabled = true; second.disabled = true; }
+	} } });
+	function sync() {
+		if (!cb.checked) return;
+		const a = Math.max(2, Math.min(10, Number(first.value || 2)));
+		const b = Math.max(2, Math.min(10, Number(second.value || a)));
+		if (mode.value === "range") {
+			second.disabled = false;
+			d.multihit = [Math.min(a, b), Math.max(a, b)];
+		} else {
+			second.disabled = true;
+			d.multihit = a;
+		}
+	}
+	return el("div", { style: { display: "flex", gap: ".45rem", alignItems: "center", flexWrap: "wrap" } },
+		el("label", { style: { display: "inline-flex", gap: ".3rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)" } }, cb, "Enable"),
+		mode, first, second,
+	);
+}
+function statBoostGrid(boosts, onUpdate) {
+	boosts = boosts || {};
+	return el("div", { class: "grid-2" },
+		...STATS.map((s) => {
+			const input = el("input", { type: "number", min: -6, max: 6, value: boosts[s] || 0, on: { input: (e) => {
+				const n = Number(e.target.value);
+				if (n) boosts[s] = n;
+				else delete boosts[s];
+				onUpdate(boosts);
+			} } });
+			return field(STAT_NAMES[s], input, "-6 to +6; 0 means no change.");
+		})
+	);
+}
+function selfBoostControl(d) {
+	const enabled = !!d.selfBoost;
+	const host = el("div", {});
+	const cb = el("input", { type: "checkbox", checked: enabled, style: { width: "auto" }, on: { change: (e) => {
+		empty(host);
+		if (e.target.checked) {
+			d.selfBoost = { boosts: { atk: 1 } };
+			host.appendChild(statBoostGrid(d.selfBoost.boosts, (boosts) => {
+				d.selfBoost = { boosts: Object.keys(boosts).length ? boosts : { atk: 1 } };
+			}));
+		} else {
+			delete d.selfBoost;
+		}
+	} } });
+	if (enabled) {
+		host.appendChild(statBoostGrid(d.selfBoost.boosts || {}, (boosts) => {
+			d.selfBoost = { boosts: Object.keys(boosts).length ? boosts : { atk: 1 } };
+		}));
+	}
+	return el("div", {},
+		el("label", { style: { display: "inline-flex", gap: ".3rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)", marginBottom: ".45rem" } }, cb, "Enable self boosts"),
+		host,
+	);
+}
+function secondaryEffectControl(d) {
+	if (d.secondary === null) delete d.secondary;
+	const host = el("div", {});
+	function ensureSecondary() {
+		if (!d.secondary) d.secondary = { chance: 30, status: "par" };
+		if (!d.secondary.chance) d.secondary.chance = 30;
+		return d.secondary;
+	}
+	function renderBody() {
+		empty(host);
+		if (!d.secondary) return;
+		const sec = ensureSecondary();
+		const chance = el("input", { type: "number", min: 1, max: 100, value: sec.chance || 30, on: { input: (e) => { ensureSecondary().chance = Number(e.target.value); } } });
+		const status = el("select", { on: { change: (e) => { const s = ensureSecondary(); if (e.target.value) s.status = e.target.value; else delete s.status; } } },
+			el("option", { value: "" }, "No status"),
+			...MOVE_STATUS_IDS.map((s) => el("option", { value: s, selected: sec.status === s }, s)),
+		);
+		const volatile = el("select", { on: { change: (e) => { const s = ensureSecondary(); if (e.target.value) s.volatileStatus = e.target.value; else delete s.volatileStatus; } } },
+			el("option", { value: "" }, "No volatile"),
+			...MOVE_VOLATILES.map((s) => el("option", { value: s, selected: sec.volatileStatus === s }, s)),
+		);
+		host.appendChild(el("div", { class: "grid-2" },
+			field("Chance", chance, "Percent chance from 1 to 100."),
+			field("Status", status, "brn/par/slp/frz/psn/tox."),
+			field("Volatile", volatile, "Confusion or flinch."),
+		));
+		host.appendChild(field("Stat drops/boosts", statBoostGrid(sec.boosts || {}, (boosts) => {
+			const s = ensureSecondary();
+			if (Object.keys(boosts).length) s.boosts = boosts;
+			else delete s.boosts;
+		}), "Negative numbers lower the target; positive numbers raise it."));
+	}
+	const cb = el("input", { type: "checkbox", checked: !!d.secondary, style: { width: "auto" }, on: { change: (e) => {
+		if (e.target.checked) ensureSecondary();
+		else delete d.secondary;
+		renderBody();
+	} } });
+	renderBody();
+	return el("div", {},
+		el("label", { style: { display: "inline-flex", gap: ".3rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)", marginBottom: ".45rem" } }, cb, "Enable secondary effect"),
+		host,
+	);
+}
+function renderMoveFormAdvanced(d) {
+	d.flags = d.flags || {};
+	if (!d.target) d.target = "normal";
+	if (!d.contestType) d.contestType = "Cute";
+	function autoId() {
+		if (d.name) d.id = moveIdOf(d.name);
+		const idEl = $(".js-move-id"); if (idEl) idEl.value = d.id || "";
+	}
+	const flagChips = MOVE_FLAGS.map((f) => {
+		const cb = el("input", { type: "checkbox", checked: d.flags[f] === 1, style: { width: "auto" }, on: { change: (e) => { if (e.target.checked) d.flags[f] = 1; else delete d.flags[f]; } } });
+		return el("label", { style: { display: "inline-flex", gap: ".3rem", marginRight: ".75rem", marginBottom: ".3rem", fontWeight: "normal", alignItems: "center", fontSize: "13px", color: "var(--dim)" } }, cb, f);
+	});
+	return el("div", {},
+		el("h3", {}, "Basic"),
+		el("div", { class: "grid-2" },
+			field("Name", textInput(d, "name", { placeholder: "Pink Bolt", onChange: autoId }), "Public move name."),
+			field("ID", el("input", { type: "text", class: "js-move-id", value: d.id || "", on: { input: (e) => { d.id = e.target.value; } } }), "Lowercase, no spaces. Auto-fills from name."),
+			field("Move number", textInput(d, "num", { type: "number" }), "Unique, must be 9001 or higher."),
+			field("Type", selectInput(d, "type", TYPES)),
+			field("Category", selectInput(d, "category", ["Physical", "Special", "Status"]), "Physical = Atk/Def; Special = SpA/SpD; Status = no damage."),
+			field("Target", selectInput(d, "target", MOVE_TARGETS), "Who the move can target in battle."),
+			field("Contest type", selectInput(d, "contestType", MOVE_CONTEST_TYPES), "Flavor category used by PS data."),
+		),
+		field("Short description", textInput(d, "shortDesc"), "Shown in /dt and tooltips."),
+		field("Long description", el("textarea", { rows: 3, value: d.desc || "", placeholder: "Optional full explanation for this move.", on: { input: (e) => { if (e.target.value) d.desc = e.target.value; else delete d.desc; } } }), "Optional detailed description."),
+		el("h3", {}, "Battle behavior"),
+		el("div", { class: "grid-2" },
+			field("Base power", textInput(d, "basePower", { type: "number" }), "0 for Status moves."),
+			field("Accuracy", accuracyControl(d)),
+			field("PP", textInput(d, "pp", { type: "number" }), "Typical range 5-40."),
+			field("Priority", textInput(d, "priority", { type: "number" }), "0 normal, +1 Quick Attack style."),
+			field("Drain", ratioControl(d, "drain", [1, 2]), "Heal for damage dealt, e.g. 1 out of 2 = 50%."),
+			field("Recoil", ratioControl(d, "recoil", [1, 3]), "Damage the user from damage dealt."),
+			field("Multihit", multihitControl(d), "Fixed hits or a min/max hit range."),
+			field("Crit ratio", optionalNumberControl(d, "critRatio", { value: 2, min: 1, max: 6 }), "Higher means more likely to crit."),
+		),
+		el("h3", {}, "Secondary effect"),
+		field("Secondary effect", secondaryEffectControl(d), "Chance-based status, flinch/confusion, or stat changes after hit."),
+		el("h3", {}, "Self boosts"),
+		field("Self boosts", selfBoostControl(d), "Boost the user's stats after using the move."),
+		el("h3", {}, "Advanced flags"),
+		field("Flags", el("div", {}, flagChips), "What this move can be blocked or boosted by."),
+	);
+}
+
+function effectParamDefault(fname) {
+	const lower = fname.toLowerCase();
+	if (lower.includes("chance")) return 30;
+	if (lower.includes("amount")) return 1;
+	if (lower.includes("bonusstages")) return 1;
+	if (lower.includes("hpfraction")) return 1 / 3;
+	if (lower.includes("recoilfraction")) return 0.1;
+	if (lower.includes("fraction")) return 0.25;
+	if (lower.includes("multiplier")) return 1.5;
+	return "";
+}
+function effectParamControl(ef, fname) {
+	ef.params = ef.params || {};
+	const selectOptions = {
+		type: TYPES,
+		status: MOVE_STATUS_IDS,
+		weather: WEATHER_IDS,
+		terrain: TERRAIN_IDS,
+		stat: STATS,
+		category: ["Physical", "Special", "Status", "any"],
+		trigger: ["ate", "berry", "lowhp"],
+	};
+	if (selectOptions[fname]) {
+		if (ef.params[fname] == null) ef.params[fname] = selectOptions[fname][0];
+		return el("select", { on: { change: (e) => { ef.params[fname] = e.target.value; } } },
+			...selectOptions[fname].map((v) => el("option", { value: v, selected: ef.params[fname] === v }, v)),
+		);
+	}
+	if (fname === "absorbsHeal" || fname === "onSwitchIn") {
+		return el("label", { style: { display: "inline-flex", gap: ".35rem", alignItems: "center", fontWeight: "normal", color: "var(--dim)" } },
+			el("input", { type: "checkbox", checked: !!ef.params[fname], style: { width: "auto" }, on: { change: (e) => { ef.params[fname] = !!e.target.checked; } } }),
+			"Enabled",
+		);
+	}
+	const numericHints = ["amount", "chance", "multiplier", "fraction", "hpFraction", "bonusStages", "recoilFraction"];
+	const isNumber = numericHints.some((hint) => fname.toLowerCase().includes(hint.toLowerCase()));
+	if (isNumber) {
+		if (ef.params[fname] == null) ef.params[fname] = effectParamDefault(fname);
+		const max = fname.toLowerCase().includes("chance") ? 100 : fname.toLowerCase().includes("fraction") ? 1 : undefined;
+		const step = fname.toLowerCase().includes("fraction") || fname.toLowerCase().includes("multiplier") ? "0.01" : "1";
+		return el("input", { type: "number", step, min: 0, max, value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; if (v === "") delete ef.params[fname]; else ef.params[fname] = Number(v); } } });
+	}
+	return el("input", { type: "text", value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; const n = Number(v); ef.params[fname] = isNaN(n) || v === "" ? v : n; } } });
+}
+
 function effectsBuilder(d, filterPrefix) {
 	const effectsHost = el("div", {});
 	function rebuildEffects() {
@@ -2092,7 +2328,7 @@ function effectsBuilder(d, filterPrefix) {
 			const kindDef = (state.effects || []).find((k) => k.id === ef.kind);
 			if (kindDef && kindDef.paramFields) {
 				for (const fname of kindDef.paramFields) {
-					paramHost.appendChild(field(fname, el("input", { type: "text", value: ef.params[fname] != null ? ef.params[fname] : "", on: { input: (e) => { const v = e.target.value; const n = Number(v); ef.params[fname] = isNaN(n) || v === "" ? v : n; } } })));
+					paramHost.appendChild(field(fname, effectParamControl(ef, fname)));
 				}
 			}
 			effectsHost.appendChild(el("div", { class: "effect-block" },
