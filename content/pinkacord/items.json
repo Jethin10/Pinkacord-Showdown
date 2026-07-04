@@ -1,4 +1,19 @@
 {
 	"schemaVersion": 1,
-	"items": []
+	"items": [
+		{
+			"id": "testingobject",
+			"num": 10300,
+			"name": "testing object",
+			"shortDesc": "A custom held item.f",
+			"effects": [
+				{
+					"kind": "itemHealPerTurn",
+					"params": {
+						"fraction": 0.25
+					}
+				}
+			]
+		}
+	]
 }
