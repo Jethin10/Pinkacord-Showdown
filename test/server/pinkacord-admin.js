@@ -243,4 +243,20 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(source.includes('"data/mods/pinkacord"'), 'admin publish should include generated Pinkacord mod files');
 		assert(source.includes('"server/static/sprites/pinkacord"'), 'admin publish should include mirrored Pinkacord sprites');
 	});
+
+	it('rebuilds browser data during hosted Docker deploys', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../Dockerfile'), 'utf8');
+		const pinkacordBuild = source.indexOf('node dist/tools/pinkacord/cli.js build');
+		const clientBuild = source.indexOf('node tools/build-client.js');
+		const clientCopy = source.indexOf('node tools/copy-client.js');
+		assert(pinkacordBuild >= 0, 'Dockerfile should build generated Pinkacord server data');
+		assert(clientBuild > pinkacordBuild, 'Dockerfile should rebuild browser data after Pinkacord server data');
+		assert(clientCopy > clientBuild, 'Dockerfile should copy rebuilt browser data into server/static');
+	});
+
+	it('generates browser format data instead of copying stale upstream formats', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/build-client.js'), 'utf8');
+		assert(source.includes('Building `data/formats.js`'), 'client build should generate formats.js from the merged server format list');
+		assert(!source.includes('C:/pokemon-showdown-pinkacord-client'), 'client build should not depend on a local Windows-only client checkout');
+	});
 });

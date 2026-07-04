@@ -43,6 +43,9 @@ RUN node build force
 # Phase 2: Pinkacord content generator (reads content/*.json, emits data/mods/pinkacord/*.ts + config/custom-formats.ts)
 RUN node dist/tools/pinkacord/cli.js build
 
+# Phase 3: browser/client data (teambuilder search, item/move/species data, formats list)
+RUN node tools/build-client.js && node tools/copy-client.js
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 2 — runtime

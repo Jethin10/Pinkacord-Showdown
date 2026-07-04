@@ -17,6 +17,9 @@ const rootDir = path.resolve(__dirname, '..');
 process.chdir(rootDir);
 
 const clientDataDir = 'client/play.pokemonshowdown.com/data';
+const staticDataSource = process.env.PINKACORD_CLIENT_DATA_SOURCE ?
+	path.resolve(process.env.PINKACORD_CLIENT_DATA_SOURCE) :
+	path.resolve(clientDataDir);
 
 function es3stringify(obj) {
 	const buf = JSON.stringify(obj);
@@ -38,6 +41,33 @@ console.log(`  Base Pokedex: ${Object.keys(Dex.data.Pokedex).length} entries`);
 console.log(`  Mod Pokedex:  ${Object.keys(modDex.data.Pokedex).length} entries`);
 
 fs.mkdirSync(clientDataDir, { recursive: true });
+
+/*********************************************************
+ * Build formats.js
+ *********************************************************/
+
+process.stdout.write('Building `data/formats.js`... ');
+
+{
+	Dex.includeFormats();
+	const clientKeys = [
+		'section', 'column', 'name', 'desc', 'threads', 'mod', 'team', 'gameType',
+		'searchShow', 'challengeShow', 'tournamentShow', 'rated', 'bestOfDefault',
+		'ruleset', 'banlist', 'unbanlist', 'restricted', 'battle', 'debug',
+		'teraPreviewDefault',
+	];
+	const Formats = Dex.formats.all().map(format => {
+		const out = {};
+		for (const key of clientKeys) {
+			if (format[key] !== undefined) out[key] = format[key];
+		}
+		return out;
+	});
+
+	const buf = 'exports.Formats = ' + es3stringify(Formats) + ';\n';
+	fs.writeFileSync(path.join(clientDataDir, 'formats.js'), buf);
+}
+console.log(' DONE');
 
 /*********************************************************
  * Build pokedex.js
@@ -255,7 +285,6 @@ process.stdout.write('Copying static data files... ');
 const staticFiles = [
 	'aliases.js',
 	'commands.js',
-	'formats.js',
 	'formats-data.js',
 	'graphics.js',
 	'text.js',
@@ -264,10 +293,10 @@ const staticFiles = [
 ];
 
 for (const file of staticFiles) {
-	const src = path.join('C:/pokemon-showdown-pinkacord-client/play.pokemonshowdown.com/data', file);
+	const src = path.join(staticDataSource, file);
 	const dest = path.join(clientDataDir, file);
 	if (fs.existsSync(src)) {
-		fs.copyFileSync(src, dest);
+		if (path.resolve(src) !== path.resolve(dest)) fs.copyFileSync(src, dest);
 	} else {
 		console.log(`  (skipped ${file} — not found in source)`);
 	}
