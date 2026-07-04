@@ -5,9 +5,13 @@ const path = require('path');
 const assert = require('assert').strict;
 
 describe('Pinkacord formats content', () => {
-	it('defines Lowering powercreep with its requested rules and bans', () => {
+	function readFormats() {
 		const file = path.resolve(__dirname, '../..', 'content/formats.json');
-		const formats = JSON.parse(fs.readFileSync(file, 'utf8')).items;
+		return JSON.parse(fs.readFileSync(file, 'utf8')).items;
+	}
+
+	it('defines Lowering powercreep with its requested rules and bans', () => {
+		const formats = readFormats();
 		const format = formats.find(f => f.id === 'pinkacordloweringpowercreep');
 
 		assert(format, 'Expected pinkacordloweringpowercreep in content/formats.json');
@@ -37,5 +41,20 @@ describe('Pinkacord formats content', () => {
 		assert.deepEqual(format.unbanlist, []);
 		assert.equal(format.sharedPower, false);
 		assert.equal(format.enabled, true);
+	});
+
+	it('does not publish the old default Pinkacord formats', () => {
+		const formats = readFormats();
+		const ids = new Set(formats.map(f => f.id));
+
+		for (const id of [
+			'pinkacordou',
+			'pinkacordubers',
+			'pinkacordrandombattle',
+			'pinkacorddoublesrandombattle',
+			'pinkacorddoublesou',
+		]) {
+			assert(!ids.has(id), `Expected ${id} to be deleted`);
+		}
 	});
 });
