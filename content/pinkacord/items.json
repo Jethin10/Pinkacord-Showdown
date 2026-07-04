@@ -14,6 +14,18 @@
 					}
 				}
 			]
+		},
+		{
+			"id": "publishkey",
+			"num": 10303,
+			"name": "Publish key",
+			"shortDesc": "A custom held item.",
+			"effects": [
+				{
+					"kind": "itemEjectAfterDamage",
+					"params": {}
+				}
+			]
 		}
 	]
 }

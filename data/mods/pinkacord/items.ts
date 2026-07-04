@@ -17,4 +17,19 @@ export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {
 		},
 		gen: 9,
 	},
+	publishkey: {
+		num: 10303,
+		name: "Publish key",
+		shortDesc: "A custom held item.",
+	
+		onAfterMoveSecondary(target, source, move) {
+			if (source && source !== target && move && move.category !== 'Status' && target.hp) {
+				if (!source.isActive || !this.canSwitch(target.side)) return;
+				if (target.volatiles['substitute'] && !move.infiltrates) return;
+				this.add('-activate', target, 'item: Eject Button');
+				target.switchFlag = true;
+			}
+		},
+		gen: 9,
+	},
 };
