@@ -254,6 +254,14 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(clientCopy > clientBuild, 'Dockerfile should copy rebuilt browser data into server/static');
 	});
 
+	it('does not let browsers keep stale hosted client assets after deploys', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../server/sockets.ts'), 'utf8');
+		assert(
+			source.includes("new StaticServer('./server/static', { cacheTime: 0 })"),
+			'hosted client assets should be revalidated so Teambuilder data fixes are visible immediately after deploy'
+		);
+	});
+
 	it('keeps the Pinkacord homepage shell when copying rebuilt client assets', () => {
 		const source = fs.readFileSync(path.join(__dirname, '../../tools/copy-client.js'), 'utf8');
 		assert(!source.includes("'index.html'"), 'client asset copy must not overwrite server/static/index.html');

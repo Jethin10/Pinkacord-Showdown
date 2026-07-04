@@ -362,7 +362,7 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 			const roomidRegex = /^\/(?:[A-Za-z0-9][A-Za-z0-9-]*)\/?$/;
 			const cssServer = new StaticServer('./config');
 			const avatarServer = new StaticServer('./config/avatars');
-			const staticServer = new StaticServer('./server/static');
+			const staticServer = new StaticServer('./server/static', { cacheTime: 0 });
 			const actionPhpRegex = /^(?:\/~~[A-Za-z0-9-]+)?\/action\.php(?:\?|$)/;
 			const proxyLogin = (req: http.IncomingMessage, res: http.ServerResponse) => {
 				const httpsModule = require('https') as typeof import('https');
