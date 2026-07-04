@@ -1,21 +1,4 @@
 {
-	"pinkachu": {
-		"level": 82,
-		"sets": [
-			{
-				"role": "Setup Sweeper",
-				"movepool": ["Pink Bolt", "Moonbolt", "Nasty Plot", "Volt Switch"],
-				"abilities": ["Rose Aura"],
-				"teraTypes": ["Fairy"]
-			},
-			{
-				"role": "Bulky Attacker",
-				"movepool": ["Pink Bolt", "Volt Switch", "Thunder Wave", "Protect"],
-				"abilities": ["Static"],
-				"teraTypes": ["Electric"]
-			}
-		]
-	},
 	"volcaron": {
 		"level": 78,
 		"sets": [

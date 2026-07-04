@@ -3,12 +3,4 @@
 // Generator: tools/pinkacord/generator.ts
 
 export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormatsDataTable = {
-	pinkachu: {
-		tier: "OU",
-		doublesTier: "DOU",
-	},
-	volcaron: {
-		tier: "OU",
-		doublesTier: "DOU",
-	},
 };
