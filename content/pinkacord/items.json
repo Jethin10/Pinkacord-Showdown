@@ -14,13 +14,6 @@
 					}
 				}
 			]
-		},
-		{
-			"id": "codexe2everifyitem",
-			"num": 10998,
-			"name": "Codex E2E Verify Item",
-			"shortDesc": "Temporary admin publish verification item.",
-			"effects": []
 		}
 	]
 }
