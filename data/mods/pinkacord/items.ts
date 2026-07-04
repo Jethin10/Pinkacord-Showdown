@@ -17,4 +17,11 @@ export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {
 		},
 		gen: 9,
 	},
+	codexe2everifyitem: {
+		num: 10998,
+		name: "Codex E2E Verify Item",
+		shortDesc: "Temporary admin publish verification item.",
+
+		gen: 9,
+	},
 };
