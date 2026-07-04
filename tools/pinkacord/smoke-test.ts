@@ -55,6 +55,11 @@ function vanillaFiller(f: { name: string; ability: string; move: string }): stri
 	return `${f.name}\nAbility: ${f.ability}\nEVs: 4 HP\nLevel: 100\n- ${f.move}`;
 }
 
+function buildVanillaTeam(gameType: string = "singles", minTeamSize = 0): string {
+	const needed = Math.max(minTeamSize, gameType === "doubles" ? 2 : 1);
+	return VANILLA_FILLERS.slice(0, needed).map(vanillaFiller).join("\n\n");
+}
+
 function parseMinTeamSize(ruleset: readonly string[]): number {
 	for (const r of ruleset) {
 		const m = r.match(/^\s*Min Team Size\s*=\s*(\d+)\s*$/i);
@@ -176,7 +181,9 @@ export function runSmokeTest(modId: string): SmokeResult[] {
 			? generateRandomTeam(f.id)
 			: (() => {
 				const minSize = parseMinTeamSize(f.ruleset || []);
-				const team = buildCanonicalTeam(content, f.gameType, minSize);
+				const team = f.mod === content.meta.id
+					? buildCanonicalTeam(content, f.gameType, minSize)
+					: buildVanillaTeam(f.gameType, minSize);
 				if (!team) return { exitCode: 1, stderr: "Could not build canonical team — no species/learnset defined." };
 				return validateTeam(f.id, team);
 			})();

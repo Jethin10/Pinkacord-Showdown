@@ -23,6 +23,38 @@
 			"enabled": true
 		},
 		{
+			"id": "pinkacordloweringpowercreep",
+			"name": "[Pinkacord] Lowering powercreep",
+			"mod": "gen9",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "Banning mons",
+			"gameType": "singles",
+			"ruleset": [
+				"Standard",
+				"Evasion Clause"
+			],
+			"banlist": [
+				"Uber",
+				"AG",
+				"Moody",
+				"Shadow Tag",
+				"Arena Trap",
+				"King's Rock",
+				"Razor Fang",
+				"Baton Pass",
+				"Last Respects",
+				"Shed Tail",
+				"Tera Blast",
+				"Ogerpon-Wellspring",
+				"Kyurem",
+				"Ceruledge"
+			],
+			"unbanlist": [],
+			"sharedPower": false,
+			"enabled": true
+		},
+		{
 			"id": "pinkacordubers",
 			"name": "[Pinkacord] Ubers",
 			"mod": "pinkacord",
