@@ -83,7 +83,10 @@ VOLUME ["/app/logs", "/app/databases", "/app/content"]
 # running in a repo where logs/repl is already present).
 # config/ must be writable too: PS persists chatrooms.json (and ladders etc.)
 # there at runtime; root-owned config/ makes every room-save crash with EACCES.
-RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord /app/logs/repl && chown -R node:node /app/logs /app/databases /app/content /app/config
+# data/ and server/static/sprites/ must be writable for hosted admin publishes:
+# the Pinkacord generator writes data/mods/*.ts.tmp and mirrors uploaded sprites.
+RUN mkdir -p /app/logs /app/databases /app/logs/pinkacord /app/logs/repl /app/server/static/sprites \
+    && chown -R node:node /app/logs /app/databases /app/content /app/config /app/data /app/server/static/sprites
 USER node
 
 # Override .npmrc's 3GB heap limit for constrained environments (Render free = 512MB).
