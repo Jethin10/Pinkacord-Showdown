@@ -8,8 +8,9 @@
  * deploys the new image, and the change becomes permanent and live.
  *
  * Uses the Git Data API (blobs → tree → commit → ref) so a publish with many
- * changed files is ONE atomic commit. Only files under content/ are touched;
- * everything else in the tree is inherited via base_tree.
+ * changed files is ONE atomic commit. The admin panel edits content/, then the
+ * generator mirrors that into the runtime files the Showdown server imports.
+ * Publish both layers so GitHub, Render, and the live server all agree.
  *
  * Env:
  *   PINKACORD_GITHUB_TOKEN (or GITHUB_TOKEN) — token with repo write access
@@ -25,7 +26,12 @@ const TOKEN = process.env.PINKACORD_GITHUB_TOKEN || process.env.GITHUB_TOKEN || 
 const REPO = process.env.PINKACORD_GITHUB_REPO || "";
 const BRANCH = process.env.PINKACORD_GITHUB_BRANCH || "main";
 const API = "https://api.github.com";
-const CONTENT_PREFIX = "content/";
+const PUBLISH_TARGETS = [
+	"content",
+	"config/custom-formats.ts",
+	"data/mods/pinkacord",
+	"server/static/sprites/pinkacord",
+];
 
 export function isPublishConfigured(): boolean {
 	return !!(TOKEN && REPO);
@@ -82,62 +88,71 @@ function gitBlobSha(buf: Buffer): string {
 	return h.digest("hex");
 }
 
-function listLocalContentFiles(repoRoot: string): string[] {
-	const out: string[] = [];
+function isPublishPath(rel: string): boolean {
+	return PUBLISH_TARGETS.some(target => rel === target || rel.startsWith(`${target}/`));
+}
+
+function listLocalPublishFiles(repoRoot: string): string[] {
+	const out = new Set<string>();
 	const walk = (dir: string) => {
 		for (const f of fs.readdirSync(dir)) {
 			const full = path.join(dir, f);
 			if (fs.statSync(full).isDirectory()) walk(full);
-			else out.push(path.relative(repoRoot, full).split(path.sep).join("/"));
+			else out.add(path.relative(repoRoot, full).split(path.sep).join("/"));
 		}
 	};
-	const contentDir = path.join(repoRoot, "content");
-	if (fs.existsSync(contentDir)) walk(contentDir);
-	return out;
+	for (const target of PUBLISH_TARGETS) {
+		const full = path.join(repoRoot, ...target.split("/"));
+		if (!fs.existsSync(full)) continue;
+		const stat = fs.statSync(full);
+		if (stat.isDirectory()) walk(full);
+		else if (stat.isFile()) out.add(target);
+	}
+	return [...out].sort();
 }
 
-async function fetchRemoteState(): Promise<{ headSha: string; treeSha: string; contentShas: Map<string, string> }> {
+async function fetchRemoteState(): Promise<{ headSha: string; treeSha: string; publishShas: Map<string, string> }> {
 	const branch = await gh("GET", `/repos/${REPO}/branches/${encodeURIComponent(BRANCH)}`);
 	const headSha = branch.commit.sha as string;
 	const treeSha = branch.commit.commit.tree.sha as string;
 	const tree = await gh("GET", `/repos/${REPO}/git/trees/${treeSha}?recursive=1`);
-	const contentShas = new Map<string, string>();
+	const publishShas = new Map<string, string>();
 	for (const entry of tree.tree as Array<{ path: string; type: string; sha: string }>) {
-		if (entry.type === "blob" && entry.path.startsWith(CONTENT_PREFIX)) {
-			contentShas.set(entry.path, entry.sha);
+		if (entry.type === "blob" && isPublishPath(entry.path)) {
+			publishShas.set(entry.path, entry.sha);
 		}
 	}
-	return { headSha, treeSha, contentShas };
+	return { headSha, treeSha, publishShas };
 }
 
-/** What differs between local content/ and the deploy branch. */
+/** What differs between local publishable files and the deploy branch. */
 export async function computeDrift(repoRoot: string): Promise<Drift> {
 	if (!isPublishConfigured()) throw new PublishError("not_configured", "GitHub publish is not configured");
 	const remote = await fetchRemoteState();
-	const localFiles = listLocalContentFiles(repoRoot);
+	const localFiles = listLocalPublishFiles(repoRoot);
 	const changed: DriftFile[] = [];
 	const localSet = new Set(localFiles);
 	for (const rel of localFiles) {
 		const buf = fs.readFileSync(path.join(repoRoot, rel));
-		const remoteSha = remote.contentShas.get(rel);
+		const remoteSha = remote.publishShas.get(rel);
 		if (!remoteSha) changed.push({ path: rel, status: "added" });
 		else if (remoteSha !== gitBlobSha(buf)) changed.push({ path: rel, status: "modified" });
 	}
-	for (const remotePath of remote.contentShas.keys()) {
+	for (const remotePath of remote.publishShas.keys()) {
 		if (!localSet.has(remotePath)) changed.push({ path: remotePath, status: "deleted" });
 	}
 	return { headSha: remote.headSha, changed };
 }
 
 /**
- * Commit every drifted content/ file to the deploy branch as one commit.
+ * Commit every drifted publishable file to the deploy branch as one commit.
  * Returns the new commit sha (Render auto-deploys it).
  */
 export async function publishContent(repoRoot: string, actor: string, summary?: string): Promise<PublishResult> {
 	if (!isPublishConfigured()) throw new PublishError("not_configured", "GitHub publish is not configured");
 
 	const remote = await fetchRemoteState();
-	const localFiles = listLocalContentFiles(repoRoot);
+	const localFiles = listLocalPublishFiles(repoRoot);
 	const localSet = new Set(localFiles);
 
 	const treeEntries: Array<{ path: string; mode: string; type: string; sha: string | null }> = [];
@@ -146,7 +161,7 @@ export async function publishContent(repoRoot: string, actor: string, summary?: 
 	for (const rel of localFiles) {
 		const buf = fs.readFileSync(path.join(repoRoot, rel));
 		const localSha = gitBlobSha(buf);
-		const remoteSha = remote.contentShas.get(rel);
+		const remoteSha = remote.publishShas.get(rel);
 		if (remoteSha === localSha) continue;
 		// Upload blob (base64 handles binary sprites and text alike).
 		const blob = await gh("POST", `/repos/${REPO}/git/blobs`, {
@@ -156,7 +171,7 @@ export async function publishContent(repoRoot: string, actor: string, summary?: 
 		treeEntries.push({ path: rel, mode: "100644", type: "blob", sha: blob.sha });
 		changed.push({ path: rel, status: remoteSha ? "modified" : "added" });
 	}
-	for (const remotePath of remote.contentShas.keys()) {
+	for (const remotePath of remote.publishShas.keys()) {
 		if (!localSet.has(remotePath)) {
 			treeEntries.push({ path: remotePath, mode: "100644", type: "blob", sha: null });
 			changed.push({ path: remotePath, status: "deleted" });

@@ -235,4 +235,12 @@ describe('Pinkacord hosted publish pipeline', () => {
 		);
 		assert(publishRoute.includes('hotpatch'), 'publish response should include the hotpatch result for the UI');
 	});
+
+	it('publishes generated server files alongside admin content', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/pinkacord-admin/github.ts'), 'utf8');
+		assert(source.includes('"content"'), 'admin publish should include editable content files');
+		assert(source.includes('"config/custom-formats.ts"'), 'admin publish should include the generated format registry');
+		assert(source.includes('"data/mods/pinkacord"'), 'admin publish should include generated Pinkacord mod files');
+		assert(source.includes('"server/static/sprites/pinkacord"'), 'admin publish should include mirrored Pinkacord sprites');
+	});
 });
