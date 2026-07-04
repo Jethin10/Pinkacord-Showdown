@@ -378,7 +378,11 @@ process.stdout.write('Building `data/teambuilder-tables.js`... ');
 	}
 	BattleTeambuilderTable.formatSlices = buildFormatSlices(BattleTeambuilderTable.tiers);
 	BattleTeambuilderTable.pinkacord = {
+		tiers: BattleTeambuilderTable.tiers,
+		items: BattleTeambuilderTable.items,
+		learnsets: BattleTeambuilderTable.learnsets,
 		overrideTier: BattleTeambuilderTable.overrideTier,
+		formatSlices: BattleTeambuilderTable.formatSlices,
 		overrideMoveData: {},
 		overrideItemData: {},
 		overrideAbilityData: {},

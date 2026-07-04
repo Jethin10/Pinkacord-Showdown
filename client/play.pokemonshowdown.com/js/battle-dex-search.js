@@ -656,6 +656,11 @@ this.dex=Dex.mod('champions');
 format=format.slice(9);
 if(format!=='ou'&&format.length>2)format='ubers';
 }
+if(format.includes('pinkacord')){
+this.formatType='pinkacord';
+this.dex=Dex.mod('pinkacord');
+format=format.slice(9);
+}
 if(format.startsWith('vgc')){
 this.formatType='doubles';
 this.isDoubles=true;
@@ -826,6 +831,7 @@ if(this.formatType==='rs')table=table['gen3rs'];
 if(this.formatType==='frlg')table=table['gen3frlg'];
 if(this.formatType==='legendsza')table=table['gen9legendsou'];
 if(this.formatType==='champions')table=table['champions'];
+if(this.formatType==='pinkacord')table=table['pinkacord'];
 if(speciesid in table.learnsets)return speciesid;
 var species=this.dex.species.get(speciesid);
 if(!species.exists)return'';
@@ -899,6 +905,7 @@ if(this.formatType==='rs')table=table['gen3rs'];
 if(this.formatType==='frlg')table=table['gen3frlg'];
 if(this.formatType==='legendsza')table=table['gen9legendsou'];
 if(this.formatType==='champions')table=table['champions'];
+if(this.formatType==='pinkacord')table=table['pinkacord'];
 var learnset=table.learnsets[learnsetid];
 var eggMovesOnly=this.eggMovesOnly(learnsetid,speciesid);
 if(learnset&&moveid in learnset&&(!this.format.startsWith('tradebacks')?learnset[moveid].includes(genChar):
@@ -937,7 +944,8 @@ this.formatType==='svdlc1natdex'?'gen9dlc1natdex':
 this.formatType==='natdex'?"gen"+gen+"natdex":
 this.formatType==='stadium'?"gen"+gen+"stadium"+(gen>1?gen:''):
 this.formatType==='legendsza'?"gen9legendsou":
-this.formatType==='champions'?"champions":"gen"+
+this.formatType==='champions'?"champions":
+this.formatType==='pinkacord'?"pinkacord":"gen"+
 gen;
 if((_table=table)!=null&&_table[tableKey]){
 table=table[tableKey];
@@ -1038,6 +1046,8 @@ if((format.endsWith('cap')||format.endsWith('caplc'))&&dex.gen<9){
 table=table["gen"+dex.gen];
 }else if(this.formatType==='champions'){
 table=table["champions"];
+}else if(this.formatType==='pinkacord'){
+table=table['pinkacord'];
 }else if(isVGCOrBS){
 table=table["gen"+dex.gen+"vgc"];
 }else if(dex.gen===9&&isHackmons&&!this.formatType){
@@ -1417,6 +1427,8 @@ table=table["gen"+this.dex.gen+"metronome"];
 table=table["gen9legendsou"];
 }else if(this.formatType==='champions'){
 table=table["champions"];
+}else if(this.formatType==='pinkacord'){
+table=table['pinkacord'];
 }else if(this.dex.gen<9){
 table=table["gen"+this.dex.gen];
 }
@@ -1806,6 +1818,7 @@ if(this.formatType==='rs')lsetTable=lsetTable['gen3rs'];
 if(this.formatType==='frlg')lsetTable=lsetTable['gen3frlg'];
 if(this.formatType==='legendsza')lsetTable=lsetTable['gen9legendsou'];
 if(this.formatType==='champions')lsetTable=lsetTable['champions'];
+if(this.formatType==='pinkacord')lsetTable=lsetTable['pinkacord'];
 if((_this$formatType15=this.formatType)!=null&&_this$formatType15.startsWith('ssdlc1'))lsetTable=lsetTable['gen8dlc1'];
 if((_this$formatType16=this.formatType)!=null&&_this$formatType16.startsWith('predlc'))lsetTable=lsetTable['gen9predlc'];
 if((_this$formatType17=this.formatType)!=null&&_this$formatType17.startsWith('svdlc1'))lsetTable=lsetTable['gen9dlc1'];

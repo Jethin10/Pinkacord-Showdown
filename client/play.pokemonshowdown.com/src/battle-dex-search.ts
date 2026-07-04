@@ -582,7 +582,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 
 	protected formatType: 'doubles' | 'bdsp' | 'bdspdoubles' | 'rs' | 'frlg' | 'bw1' | 'letsgo' | 'metronome' | 'natdex' |
 		'nfe' | 'ssdlc1' | 'ssdlc1doubles' | 'predlc' | 'predlcdoubles' | 'predlcnatdex' | 'svdlc1' | 'svdlc1doubles' |
-		'svdlc1natdex' | 'stadium' | 'lc' | 'legendsza' | 'champions' | null = null;
+		'svdlc1natdex' | 'stadium' | 'lc' | 'legendsza' | 'champions' | 'pinkacord' | null = null;
 	isDoubles = false;
 
 	/**
@@ -655,6 +655,11 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			this.dex = Dex.mod('champions' as ID);
 			format = format.slice(9) as ID;
 			if (format !== 'ou' && format.length > 2) format = 'ubers' as ID;
+		}
+		if (format.includes('pinkacord')) {
+			this.formatType = 'pinkacord';
+			this.dex = Dex.mod('pinkacord' as ID);
+			format = format.slice(9) as ID;
 		}
 		if (format.startsWith('vgc')) {
 			this.formatType = 'doubles';
@@ -826,6 +831,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 		if (this.formatType === 'frlg') table = table['gen3frlg'];
 		if (this.formatType === 'legendsza') table = table['gen9legendsou'];
 		if (this.formatType === 'champions') table = table['champions'];
+		if (this.formatType === 'pinkacord') table = table['pinkacord'];
 		if (speciesid in table.learnsets) return speciesid;
 		const species = this.dex.species.get(speciesid);
 		if (!species.exists) return '' as ID;
@@ -899,6 +905,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			if (this.formatType === 'frlg') table = table['gen3frlg'];
 			if (this.formatType === 'legendsza') table = table['gen9legendsou'];
 			if (this.formatType === 'champions') table = table['champions'];
+			if (this.formatType === 'pinkacord') table = table['pinkacord'];
 			let learnset = table.learnsets[learnsetid];
 			const eggMovesOnly = this.eggMovesOnly(learnsetid, speciesid);
 			if (learnset && (moveid in learnset) && (!this.format.startsWith('tradebacks') ? learnset[moveid].includes(genChar) :
@@ -938,6 +945,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			this.formatType === 'stadium' ? `gen${gen}stadium${gen > 1 ? gen : ''}` :
 			this.formatType === 'legendsza' ? `gen9legendsou` :
 			this.formatType === 'champions' ? `champions` :
+			this.formatType === 'pinkacord' ? `pinkacord` :
 			`gen${gen}`;
 		if (table?.[tableKey]) {
 			table = table[tableKey];
@@ -1038,6 +1046,8 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 			table = table[`gen${dex.gen}`];
 		} else if (this.formatType === 'champions') {
 			table = table[`champions`];
+		} else if (this.formatType === 'pinkacord') {
+			table = table['pinkacord'];
 		} else if (isVGCOrBS) {
 			table = table[`gen${dex.gen}vgc`];
 		} else if (dex.gen === 9 && isHackmons && !this.formatType) {
@@ -1417,6 +1427,8 @@ class BattleItemSearch extends BattleTypedSearch<'item'> {
 			table = table[`gen9legendsou`];
 		} else if (this.formatType === 'champions') {
 			table = table[`champions`];
+		} else if (this.formatType === 'pinkacord') {
+			table = table['pinkacord'];
 		} else if (this.dex.gen < 9) {
 			table = table[`gen${this.dex.gen}`];
 		}
@@ -1806,6 +1818,7 @@ class BattleMoveSearch extends BattleTypedSearch<'move'> {
 		if (this.formatType === 'frlg') lsetTable = lsetTable['gen3frlg'];
 		if (this.formatType === 'legendsza') lsetTable = lsetTable['gen9legendsou'];
 		if (this.formatType === 'champions') lsetTable = lsetTable['champions'];
+		if (this.formatType === 'pinkacord') lsetTable = lsetTable['pinkacord'];
 		if (this.formatType?.startsWith('ssdlc1')) lsetTable = lsetTable['gen8dlc1'];
 		if (this.formatType?.startsWith('predlc')) lsetTable = lsetTable['gen9predlc'];
 		if (this.formatType?.startsWith('svdlc1')) lsetTable = lsetTable['gen9dlc1'];

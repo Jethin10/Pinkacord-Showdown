@@ -281,6 +281,39 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(source.includes('Building `data/formats-data.js`'), 'formats-data.js must be rebuilt from current Pinkacord data');
 	});
 
+	it('resolves Pinkacord teambuilder searches as a Gen 9 custom mod', () => {
+		const dexSource = fs.readFileSync(path.join(__dirname, '../../client/play.pokemonshowdown.com/src/battle-dex.ts'), 'utf8');
+		assert(dexSource.includes("formatid.includes('pinkacord')"), 'client dex should treat Pinkacord format IDs as Gen 9');
+		assert(dexSource.includes("Dex.mod('pinkacord' as ID)"), 'client dex should use the Pinkacord mod for Pinkacord teams');
+		assert(dexSource.includes("this.modid === 'pinkacord'"), 'client modded dex should support the Pinkacord mod ID');
+
+		const searchSource = fs.readFileSync(
+			path.join(__dirname, '../../client/play.pokemonshowdown.com/src/battle-dex-search.ts'),
+			'utf8'
+		);
+		assert(searchSource.includes("'pinkacord' | null"), 'typed search should have a Pinkacord format type');
+		assert(searchSource.includes("this.formatType = 'pinkacord'"), 'typed search should detect Pinkacord formats');
+		assert(searchSource.includes("table = table['pinkacord']"), 'typed search should read Pinkacord teambuilder tables');
+
+		const buildSource = fs.readFileSync(path.join(__dirname, '../../tools/build-client.js'), 'utf8');
+		const pinkacordTable = extractBlock(
+			buildSource,
+			'BattleTeambuilderTable.pinkacord = {',
+			'writeJSONParseExport(path.join(clientDataDir'
+		);
+		for (const key of ['tiers', 'items', 'learnsets', 'formatSlices']) {
+			assert(pinkacordTable.includes(`${key}: BattleTeambuilderTable.${key}`), `Pinkacord table should include ${key}`);
+		}
+
+		for (const file of ['battle-dex.js', 'battle-dex-search.js']) {
+			const browserBundle = fs.readFileSync(
+				path.join(__dirname, '../../client/play.pokemonshowdown.com/js', file),
+				'utf8'
+			);
+			assert(browserBundle.includes('pinkacord'), `${file} should include the served Pinkacord teambuilder fix`);
+		}
+	});
+
 	it('uses the Pinkacord dex for the Pinkacord lobby format', () => {
 		const formats = JSON.parse(fs.readFileSync(path.join(__dirname, '../../content/formats.json'), 'utf8')).items;
 		const format = formats.find(f => f.id === 'pinkacordloweringpowercreep');

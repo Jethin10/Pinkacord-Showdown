@@ -268,6 +268,7 @@ export const Dex = new class implements ModdedDex {
 	formatGen(format: string) {
 		const formatid = toID(format);
 		if (!formatid) return Dex.gen;
+		if (formatid.includes('pinkacord')) return 9;
 		if (!formatid.startsWith('gen')) return 6;
 		return parseInt(formatid.charAt(3)) || Dex.gen;
 	}
@@ -286,6 +287,9 @@ export const Dex = new class implements ModdedDex {
 		}
 		if (dex.gen === 9 && formatid.includes('champions')) {
 			dex = Dex.mod('champions' as ID);
+		}
+		if (dex.gen === 9 && formatid.includes('pinkacord')) {
+			dex = Dex.mod('pinkacord' as ID);
 		}
 		return dex;
 	}
@@ -985,7 +989,10 @@ export class ModdedDex {
 		this.modid = modid;
 		let gen = parseInt(modid.charAt(3), 10);
 		if (this.modid === 'champions') gen = 9;
-		if ((modid !== 'champions' && !modid.startsWith('gen')) || !gen) throw new Error("Unsupported modid");
+		if (this.modid === 'pinkacord') gen = 9;
+		if ((modid !== 'champions' && modid !== 'pinkacord' && !modid.startsWith('gen')) || !gen) {
+			throw new Error("Unsupported modid");
+		}
 		this.gen = gen;
 	}
 	moves = {
