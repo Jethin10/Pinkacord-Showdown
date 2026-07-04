@@ -33,6 +33,114 @@ function requireNoCache(pathSpec) {
 	return require(pathSpec);
 }
 
+function writeJSONParseExport(filePath, exportName, data) {
+	const json = JSON.stringify(data).replace(/['\\]/g, "\\$&");
+	fs.writeFileSync(filePath, `exports.${exportName} = JSON.parse('${json}');\n`);
+}
+
+function loadMergedData(file, exportName) {
+	const base = requireNoCache(`../dist/data/${file}.js`)[exportName];
+	let mod = {};
+	try {
+		mod = requireNoCache(`../dist/data/mods/pinkacord/${file}.js`)[exportName] || {};
+	} catch {}
+	return { ...base, ...mod };
+}
+
+function compactLearnsetEntry(sources) {
+	const codes = new Set();
+	for (const source of sources) {
+		const gen = source.charAt(0);
+		if (!/[1-9]/.test(gen)) continue;
+		codes.add(gen);
+		if (gen === '6') codes.add('p');
+		if (gen === '7') codes.add('q');
+		if (gen === '8') codes.add('g');
+		if (gen === '9') codes.add('a');
+		if (source.includes('E')) codes.add('e');
+	}
+	return '123456789pqgae'.split('').filter(code => codes.has(code)).join('');
+}
+
+function compactLearnsets(rawLearnsets) {
+	const learnsets = {};
+	for (const id in rawLearnsets) {
+		const raw = rawLearnsets[id].learnset || rawLearnsets[id];
+		const compact = {};
+		for (const moveid in raw) {
+			if (!Array.isArray(raw[moveid]) && typeof raw[moveid] !== 'string') continue;
+			if (Array.isArray(raw[moveid])) {
+				const sources = raw[moveid].filter(source => typeof source === 'string');
+				if (!sources.length) continue;
+				compact[moveid] = compactLearnsetEntry(sources);
+			} else {
+				compact[moveid] = raw[moveid];
+			}
+		}
+		learnsets[id] = compact;
+	}
+	return learnsets;
+}
+
+function addSearchRows(rows, table, type) {
+	for (const id of Object.keys(table)) {
+		rows.push([id, type]);
+	}
+}
+
+function sortSearchRows(rows) {
+	rows.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0);
+	return rows;
+}
+
+function buildItemRows(Items) {
+	const rows = [['header', 'Items']];
+	for (const id of Object.keys(Items).sort()) {
+		const item = Items[id];
+		if (item.isNonstandard === 'Past' || item.isNonstandard === 'LGPE') continue;
+		rows.push(id);
+	}
+	return rows;
+}
+
+function buildTierRows(Pokedex, FormatsData) {
+	const tierOrder = [
+		'AG', 'Uber', 'OU', 'UUBL', 'UU', 'RUBL', 'RU', 'NUBL', 'NU', 'PUBL',
+		'PU', 'ZUBL', 'ZU', 'NFE', 'LC', 'CAP', 'Unreleased', 'Illegal',
+	];
+	const buckets = {};
+	for (const id in Pokedex) {
+		const species = Pokedex[id];
+		if (species.isNonstandard === 'Past' || species.isNonstandard === 'CAP' && species.tier !== 'CAP') continue;
+		const tier = FormatsData[id]?.tier || species.tier || 'Illegal';
+		if (!buckets[tier]) buckets[tier] = [];
+		buckets[tier].push(id);
+	}
+	const rows = [];
+	for (const tier of tierOrder) {
+		const bucket = buckets[tier];
+		if (!bucket?.length) continue;
+		rows.push(['header', tier]);
+		rows.push(...bucket.sort((a, b) => {
+			const speciesA = Pokedex[a];
+			const speciesB = Pokedex[b];
+			const numA = speciesA.num || 0;
+			const numB = speciesB.num || 0;
+			return numA - numB || (speciesA.name || a).localeCompare(speciesB.name || b);
+		}));
+	}
+	return rows;
+}
+
+function buildFormatSlices(tiers) {
+	const slices = {};
+	for (let i = 0; i < tiers.length; i++) {
+		const row = tiers[i];
+		if (Array.isArray(row) && row[0] === 'header') slices[row[1]] = i;
+	}
+	return slices;
+}
+
 // Load base Dex and pinkacord mod
 console.log('Loading data...');
 const { Dex } = require('../dist/sim/dex');
@@ -77,9 +185,7 @@ process.stdout.write('Building `data/pokedex.js`... ');
 
 {
 	// Load base pokedex, then merge pinkacord on top
-	const basePokedex = requireNoCache('../dist/data/pokedex.js').Pokedex;
-	const modPokedex = requireNoCache('../dist/data/mods/pinkacord/pokedex.js').Pokedex;
-	const Pokedex = { ...basePokedex, ...modPokedex };
+	const Pokedex = loadMergedData('pokedex', 'Pokedex');
 
 	// Enrich with tier data from FormatsData
 	const FormatsData = modDex.data.FormatsData;
@@ -99,15 +205,26 @@ process.stdout.write('Building `data/pokedex.js`... ');
 console.log(' DONE');
 
 /*********************************************************
+ * Build formats-data.js
+ *********************************************************/
+
+process.stdout.write('Building `data/formats-data.js`... ');
+
+{
+	const FormatsData = loadMergedData('formats-data', 'FormatsData');
+	const buf = 'exports.BattleFormatsData = ' + es3stringify(FormatsData) + ';\n';
+	fs.writeFileSync(path.join(clientDataDir, 'formats-data.js'), buf);
+}
+console.log(' DONE');
+
+/*********************************************************
  * Build moves.js
  *********************************************************/
 
 process.stdout.write('Building `data/moves.js`... ');
 
 {
-	const baseMoves = requireNoCache('../dist/data/moves.js').Moves;
-	const modMoves = requireNoCache('../dist/data/mods/pinkacord/moves.js').Moves;
-	const Moves = { ...baseMoves, ...modMoves };
+	const Moves = loadMergedData('moves', 'Moves');
 
 	// Enrich with desc from Dex.moves
 	for (const id in Moves) {
@@ -130,9 +247,7 @@ console.log(' DONE');
 process.stdout.write('Building `data/items.js`... ');
 
 {
-	const baseItems = requireNoCache('../dist/data/items.js').Items;
-	const modItems = requireNoCache('../dist/data/mods/pinkacord/items.js').Items;
-	const Items = { ...baseItems, ...modItems };
+	const Items = loadMergedData('items', 'Items');
 
 	for (const id in Items) {
 		const item = modDex.items.get(Items[id].name);
@@ -154,9 +269,7 @@ console.log(' DONE');
 process.stdout.write('Building `data/abilities.js`... ');
 
 {
-	const baseAbilities = requireNoCache('../dist/data/abilities.js').Abilities;
-	const modAbilities = requireNoCache('../dist/data/mods/pinkacord/abilities.js').Abilities;
-	const Abilities = { ...baseAbilities, ...modAbilities };
+	const Abilities = loadMergedData('abilities', 'Abilities');
 
 	for (const id in Abilities) {
 		const ability = modDex.abilities.get(Abilities[id].name);
@@ -178,12 +291,7 @@ console.log(' DONE');
 process.stdout.write('Building `data/typechart.js`... ');
 
 {
-	const baseTypeChart = requireNoCache('../dist/data/typechart.js').TypeChart;
-	let modTypeChart = {};
-	try {
-		modTypeChart = requireNoCache('../dist/data/mods/pinkacord/typechart.js').TypeChart || {};
-	} catch {}
-	const TypeChart = { ...baseTypeChart, ...modTypeChart };
+	const TypeChart = loadMergedData('typechart', 'TypeChart');
 
 	const buf = 'exports.BattleTypeChart = ' + es3stringify(TypeChart) + ';\n';
 	fs.writeFileSync(path.join(clientDataDir, 'typechart.js'), buf);
@@ -197,12 +305,7 @@ console.log(' DONE');
 process.stdout.write('Building `data/learnsets.js`... ');
 
 {
-	const baseLearnsets = requireNoCache('../dist/data/learnsets.js').Learnsets;
-	let modLearnsets = {};
-	try {
-		modLearnsets = requireNoCache('../dist/data/mods/pinkacord/learnsets.js').Learnsets || {};
-	} catch {}
-	const Learnsets = { ...baseLearnsets, ...modLearnsets };
+	const Learnsets = loadMergedData('learnsets', 'Learnsets');
 
 	const buf = 'exports.BattleLearnsets = ' + es3stringify(Learnsets) + ';\n';
 	fs.writeFileSync(path.join(clientDataDir, 'learnsets.js'), buf);
@@ -216,27 +319,25 @@ console.log(' DONE');
 process.stdout.write('Building `data/search-index.js`... ');
 
 {
-	const Pokedex = modDex.data.Pokedex;
-	const Moves = modDex.data.Moves;
-	const Items = modDex.data.Items;
-	const Abilities = modDex.data.Abilities;
-	const TypeChart = modDex.data.TypeChart;
+	const Pokedex = loadMergedData('pokedex', 'Pokedex');
+	const Moves = loadMergedData('moves', 'Moves');
+	const Items = loadMergedData('items', 'Items');
+	const Abilities = loadMergedData('abilities', 'Abilities');
+	const TypeChart = loadMergedData('typechart', 'TypeChart');
 	const toID = Dex.toID;
 
-	let index = [];
-	index = index.concat(Object.keys(Pokedex).map(x => x + ' pokemon'));
-	index = index.concat(Object.keys(Moves).map(x => x + ' move'));
-	index = index.concat(Object.keys(Items).map(x => x + ' item'));
-	index = index.concat(Object.keys(Abilities).map(x => x + ' ability'));
-	index = index.concat(Object.keys(TypeChart).map(x => toID(x) + ' type'));
+	const BattleSearchIndex = [];
+	addSearchRows(BattleSearchIndex, Pokedex, 'pokemon');
+	addSearchRows(BattleSearchIndex, Moves, 'move');
+	addSearchRows(BattleSearchIndex, Items, 'item');
+	addSearchRows(BattleSearchIndex, Abilities, 'ability');
+	for (const typeName of Object.keys(TypeChart)) {
+		BattleSearchIndex.push([toID(typeName), 'type']);
+	}
+	sortSearchRows(BattleSearchIndex);
 
-	let BattleSearchIndex = [];
-	let BattleSearchIndexOffset = [];
+	const BattleSearchIndexOffset = BattleSearchIndex.map(() => '');
 	let BattleSearchCountIndex = [];
-
-	// Simple search index: just sort and join
-	index.sort();
-	BattleSearchIndex = index;
 
 	const buf = 'exports.BattleSearchIndex = ' + JSON.stringify(BattleSearchIndex) + ';\n' +
 		'exports.BattleSearchIndexOffset = ' + JSON.stringify(BattleSearchIndexOffset) + ';\n' +
@@ -252,27 +353,41 @@ console.log(' DONE');
 process.stdout.write('Building `data/teambuilder-tables.js`... ');
 
 {
-	// Build tier lists for the teambuilder
-	const Pokedex = modDex.data.Pokedex;
-	const FormatsData = modDex.data.FormatsData;
-	const BattleTeambuilderTable = { tiers: [] };
+	const Pokedex = loadMergedData('pokedex', 'Pokedex');
+	const FormatsData = loadMergedData('formats-data', 'FormatsData');
+	const Items = loadMergedData('items', 'Items');
+	const Learnsets = loadMergedData('learnsets', 'Learnsets');
 
-	const tierMap = {};
-	for (const id in FormatsData) {
-		const entry = FormatsData[id];
-		const tier = entry.tier || 'Illegal';
-		if (!tierMap[tier]) tierMap[tier] = [];
-		tierMap[tier].push(id);
+	const BattleTeambuilderTable = {
+		tiers: buildTierRows(Pokedex, FormatsData),
+		items: buildItemRows(Items),
+		learnsets: compactLearnsets(Learnsets),
+		overrideTier: {},
+		formatSlices: {},
+		overrideMoveData: {},
+		overrideItemData: {},
+		overrideAbilityData: {},
+		overrideSpeciesData: {},
+		overrideTypeChart: {},
+		removeType: {},
+	};
+
+	for (const id in Pokedex) {
+		const tier = FormatsData[id]?.tier || Pokedex[id].tier;
+		if (tier) BattleTeambuilderTable.overrideTier[id] = tier;
 	}
+	BattleTeambuilderTable.formatSlices = buildFormatSlices(BattleTeambuilderTable.tiers);
+	BattleTeambuilderTable.pinkacord = {
+		overrideTier: BattleTeambuilderTable.overrideTier,
+		overrideMoveData: {},
+		overrideItemData: {},
+		overrideAbilityData: {},
+		overrideSpeciesData: {},
+		overrideTypeChart: {},
+		removeType: {},
+	};
 
-	for (const tier of ['AG', 'Uber', 'OU', 'UUBL', 'UU', 'RUBL', 'RU', 'NUBL', 'NU', 'PUBL', 'PU', 'ZUBL', 'ZU', 'NFE', 'LC', 'CAP', 'Unreleased']) {
-		if (tierMap[tier]) {
-			BattleTeambuilderTable.tiers.push(...tierMap[tier]);
-		}
-	}
-
-	const buf = `exports.BattleTeambuilderTable = JSON.parse('${JSON.stringify(BattleTeambuilderTable).replace(/['\\]/g, "\\$&")}');\n`;
-	fs.writeFileSync(path.join(clientDataDir, 'teambuilder-tables.js'), buf);
+	writeJSONParseExport(path.join(clientDataDir, 'teambuilder-tables.js'), 'BattleTeambuilderTable', BattleTeambuilderTable);
 }
 console.log(' DONE');
 
@@ -285,7 +400,6 @@ process.stdout.write('Copying static data files... ');
 const staticFiles = [
 	'aliases.js',
 	'commands.js',
-	'formats-data.js',
 	'graphics.js',
 	'text.js',
 	'text-afd.js',

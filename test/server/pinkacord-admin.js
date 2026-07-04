@@ -273,6 +273,14 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(!source.includes('C:/pokemon-showdown-pinkacord-client'), 'client build should not depend on a local Windows-only client checkout');
 	});
 
+	it('builds Teambuilder search data in the shape the browser client expects', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/build-client.js'), 'utf8');
+		assert(!source.includes("x + ' pokemon'"), 'search-index rows must be arrays, not "id type" strings');
+		assert(source.includes('items: buildItemRows'), 'Teambuilder table must include item rows');
+		assert(source.includes('learnsets: compactLearnsets'), 'Teambuilder table must include compact learnsets');
+		assert(source.includes('Building `data/formats-data.js`'), 'formats-data.js must be rebuilt from current Pinkacord data');
+	});
+
 	it('uses the Pinkacord dex for the Pinkacord lobby format', () => {
 		const formats = JSON.parse(fs.readFileSync(path.join(__dirname, '../../content/formats.json'), 'utf8')).items;
 		const format = formats.find(f => f.id === 'pinkacordloweringpowercreep');
