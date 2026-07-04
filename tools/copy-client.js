@@ -36,17 +36,12 @@ copyRecursive(path.join(clientDir, 'style'), path.join(staticDir, 'style'));
 console.log('Copying fx files...');
 copyRecursive(path.join(clientDir, 'fx'), path.join(staticDir, 'fx'));
 
-// Copy config
-console.log('Copying config files...');
-copyRecursive(path.join(clientDir, 'config'), path.join(staticDir, 'config'));
-
 // Copy sprites
 console.log('Copying sprite files...');
 copyRecursive(path.join(clientDir, 'sprites'), path.join(staticDir, 'sprites'));
 
-// Copy static assets
+// Keep the hosted shell/config in server/static; they use Pinkacord-specific URLs.
 const staticAssets = [
-	'index.html',
 	'favicon.ico',
 	'favicon-256.png',
 	'pokemonshowdownbeta.png',

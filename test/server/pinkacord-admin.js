@@ -254,6 +254,19 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(clientCopy > clientBuild, 'Dockerfile should copy rebuilt browser data into server/static');
 	});
 
+	it('keeps the Pinkacord homepage shell when copying rebuilt client assets', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/copy-client.js'), 'utf8');
+		assert(!source.includes("'index.html'"), 'client asset copy must not overwrite server/static/index.html');
+	});
+
+	it('keeps the Pinkacord hosted client config when copying rebuilt client assets', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/copy-client.js'), 'utf8');
+		assert(
+			!source.includes("copyRecursive(path.join(clientDir, 'config')"),
+			'client asset copy must not overwrite server/static/config/config.js'
+		);
+	});
+
 	it('generates browser format data instead of copying stale upstream formats', () => {
 		const source = fs.readFileSync(path.join(__dirname, '../../tools/build-client.js'), 'utf8');
 		assert(source.includes('Building `data/formats.js`'), 'client build should generate formats.js from the merged server format list');
