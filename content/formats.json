@@ -4,7 +4,7 @@
 		{
 			"id": "pinkacordloweringpowercreep",
 			"name": "[Pinkacord] Lowering powercreep",
-			"mod": "gen9",
+			"mod": "pinkacord",
 			"section": "Pinkacord",
 			"column": 1,
 			"desc": "Banning mons",

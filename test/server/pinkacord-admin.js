@@ -259,4 +259,19 @@ describe('Pinkacord hosted publish pipeline', () => {
 		assert(source.includes('Building `data/formats.js`'), 'client build should generate formats.js from the merged server format list');
 		assert(!source.includes('C:/pokemon-showdown-pinkacord-client'), 'client build should not depend on a local Windows-only client checkout');
 	});
+
+	it('uses the Pinkacord dex for the Pinkacord lobby format', () => {
+		const formats = JSON.parse(fs.readFileSync(path.join(__dirname, '../../content/formats.json'), 'utf8')).items;
+		const format = formats.find(f => f.id === 'pinkacordloweringpowercreep');
+		assert(format, 'expected the Pinkacord lowering powercreep format to exist');
+		assert.equal(format.mod, 'pinkacord', 'Pinkacord formats must use the custom dex so admin-added content is legal');
+	});
+
+	it('lets Pinkacord smoke tests fall back to inherited Gen 9 content', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/pinkacord/smoke-test.ts'), 'utf8');
+		assert(
+			source.includes('if (!team) return validateTeam(f.id, buildVanillaTeam(f.gameType, minSize));'),
+			'Pinkacord formats without custom species should smoke-test with inherited Gen 9 filler teams'
+		);
+	});
 });

@@ -184,7 +184,7 @@ export function runSmokeTest(modId: string): SmokeResult[] {
 				const team = f.mod === content.meta.id
 					? buildCanonicalTeam(content, f.gameType, minSize)
 					: buildVanillaTeam(f.gameType, minSize);
-				if (!team) return { exitCode: 1, stderr: "Could not build canonical team — no species/learnset defined." };
+				if (!team) return validateTeam(f.id, buildVanillaTeam(f.gameType, minSize));
 				return validateTeam(f.id, team);
 			})();
 		const failedDueToClause = result.exitCode !== 0 && isTeambuildFailureNotFormatBug(result.stderr);
