@@ -1,20 +1,4 @@
 {
 	"schemaVersion": 1,
-	"items": [
-		{
-			"id": "deathstar",
-			"num": 9001,
-			"name": "Death star",
-			"shortDesc": "A custom held item.",
-			"effects": [
-				{
-					"kind": "itemBoostDamageWithRecoil",
-					"params": {
-						"multiplier": 2,
-						"recoilFraction": 0.01
-					}
-				}
-			]
-		}
-	]
+	"items": []
 }

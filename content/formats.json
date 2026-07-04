@@ -32,32 +32,6 @@
 			"unbanlist": [],
 			"sharedPower": false,
 			"enabled": true
-		},
-		{
-			"id": "pinkacordtest",
-			"name": "[Pinkacord] Test",
-			"mod": "pinkacord",
-			"section": "Pinkacord",
-			"column": 1,
-			"desc": "A custom Pinkacord format.",
-			"gameType": "singles",
-			"ruleset": [
-				"Standard",
-				"Sleep Clause Mod",
-				"Species Clause",
-				"OHKO Clause",
-				"Endless Battle Clause",
-				"HP Percentage Mod"
-			],
-			"banlist": [
-				"Uber",
-				"AG",
-				"Moody",
-				"Baton Pass"
-			],
-			"unbanlist": [],
-			"sharedPower": false,
-			"enabled": true
 		}
 	]
 }
