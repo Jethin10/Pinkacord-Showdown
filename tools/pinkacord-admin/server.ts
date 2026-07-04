@@ -320,11 +320,13 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 	}
 	if (method === "POST" && pathname === "/api/publish") {
 		let summary = "";
+		let hotpatch;
 		try { summary = String(JSON.parse(await readBody(req)).summary || "").slice(0, 120); } catch { /* optional body */ }
 		try {
 			// Validation gate: run the content generator first so a broken
 			// pokedex.json can't be committed and take down the deploy.
 			runGenerator(MOD_ID);
+			hotpatch = await runHotpatch();
 		} catch (e: any) {
 			if (e instanceof BuildError) {
 				return sendJson(res, 400, { ok: false, code: "validation_failed", message: `${e.file}`, fieldErrors: e.issues });
@@ -333,12 +335,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 		}
 		try {
 			const result = await publishContent(REPO_ROOT, actor, summary);
-			appendAudit({ actor, action: "publish", meta: { sha: result.sha, files: result.changed.length, summary } });
-			return sendJson(res, 200, { ok: true, sha: result.sha, url: result.url, changed: result.changed });
+			appendAudit({ actor, action: "publish", meta: { sha: result.sha, files: result.changed.length, summary, hotpatch } });
+			return sendJson(res, 200, { ok: true, sha: result.sha, url: result.url, changed: result.changed, hotpatch });
 		} catch (e: any) {
 			if (e instanceof PublishError) {
 				const status = e.code === "no_changes" ? 409 : e.code === "not_configured" ? 400 : 502;
-				return sendJson(res, status, { ok: false, code: e.code, message: e.message });
+				return sendJson(res, status, { ok: false, code: e.code, message: e.message, hotpatch });
 			}
 			return sendJson(res, 500, { ok: false, code: "internal", message: e.message ?? String(e) });
 		}

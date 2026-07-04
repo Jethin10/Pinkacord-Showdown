@@ -29,17 +29,22 @@
  *   → |/hotpatch teamvalidator
  */
 
+import * as fs from "fs";
+import * as net from "net";
+import * as path from "path";
+
 const PS_WS_HOST = process.env.PINKACORD_PS_HOST || "127.0.0.1";
 const PS_WS_PORT = process.env.PINKACORD_PS_PORT || "8000";
 const LOGIN_URL = process.env.PINKACORD_LOGIN_URL || "https://play.pokemonshowdown.com/api/login";
 const BOT_USER = process.env.PINKACORD_BOT_USERNAME || "";
 const BOT_PASS = process.env.PINKACORD_BOT_PASSWORD || "";
 const TIMEOUT_MS = Number(process.env.PINKACORD_HOTPATCH_TIMEOUT_MS || 15_000);
+const REPL_SOCKET = process.env.PINKACORD_REPL_SOCKET || path.resolve(process.cwd(), "logs/repl/app");
 
 const HOTPATCH_COMMANDS = ["formats", "battles", "teamvalidator"] as const;
 
 export interface HotpatchResult {
-	mode: "auto" | "manual" | "error";
+	mode: "internal" | "auto" | "manual" | "error";
 	applied: string[];      // commands successfully acked by PS
 	errors: string[];       // commands rejected / failed
 	rawResponses: string[]; // raw lines from PS for debugging
@@ -55,6 +60,9 @@ export function isBotConfigured(): boolean {
 }
 
 export async function runHotpatch(): Promise<HotpatchResult> {
+	const internal = await tryInternalHotpatch();
+	if (internal) return internal;
+
 	if (!isBotConfigured()) {
 		return { mode: "manual", applied: [], errors: [], rawResponses: [], message: MANUAL_INSTRUCTIONS };
 	}
@@ -76,6 +84,81 @@ export async function runHotpatch(): Promise<HotpatchResult> {
 // ────────────────────────────────────────────────────────────────────────────
 // Implementation
 // ────────────────────────────────────────────────────────────────────────────
+
+async function tryInternalHotpatch(): Promise<HotpatchResult | null> {
+	if (process.env.PINKACORD_INTERNAL_HOTPATCH === "0") return null;
+	if (process.platform === "win32" && !REPL_SOCKET.startsWith("\\\\.\\")) return null;
+	if (!fs.existsSync(REPL_SOCKET)) return null;
+
+	try {
+		const raw = await runWithTimeout(runMainReplHotpatch(), TIMEOUT_MS);
+		const match = raw.match(/PINKACORD_HOTPATCH_RESULT:(\{[^\r\n]*\})/);
+		if (!match) {
+			return {
+				mode: "error",
+				applied: [],
+				errors: ["main REPL did not return a hotpatch result"],
+				rawResponses: raw.split("\n").filter(Boolean),
+				message: "Live hotpatch failed: main REPL did not return a result",
+			};
+		}
+		const json = JSON.parse(match[1]);
+		return {
+			mode: json.ok ? "internal" : "error",
+			applied: Array.isArray(json.applied) ? json.applied : [],
+			errors: Array.isArray(json.errors) ? json.errors : [],
+			rawResponses: raw.split("\n").filter(Boolean),
+			message: String(json.message || (json.ok ? "Live server hotpatched" : "Live hotpatch failed")),
+		};
+	} catch (e: any) {
+		if (["ENOENT", "ECONNREFUSED", "EACCES"].includes(e?.code)) return null;
+		return {
+			mode: "error",
+			applied: [],
+			errors: [e.message ?? String(e)],
+			rawResponses: [],
+			message: `Live hotpatch failed: ${e.message ?? String(e)}`,
+		};
+	}
+}
+
+function runMainReplHotpatch(): Promise<string> {
+	const script =
+		`(() => { ` +
+		`try { ` +
+		`const hook = global.PinkacordLiveHotpatch; ` +
+		`if (!hook || typeof hook.apply !== "function") throw new Error("PinkacordLiveHotpatch hook is not loaded"); ` +
+		`return "PINKACORD_HOTPATCH_RESULT:" + JSON.stringify(hook.apply()); ` +
+		`} catch (e) { ` +
+		`return "PINKACORD_HOTPATCH_RESULT:" + JSON.stringify({ok:false, applied:[], errors:[e && (e.stack || e.message) || String(e)], message:"Live hotpatch failed"}); ` +
+		`} ` +
+		`})()`;
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		let raw = "";
+		const socket = net.connect(REPL_SOCKET);
+		const settle = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			try { socket.destroy(); } catch {}
+			fn();
+		};
+		socket.setEncoding("utf8");
+		socket.setTimeout(TIMEOUT_MS, () => settle(() => reject(new Error("main REPL hotpatch timed out"))));
+		socket.on("connect", () => socket.write(`${script}\n`));
+		socket.on("data", chunk => {
+			raw += chunk;
+			if (raw.includes("PINKACORD_HOTPATCH_RESULT:")) {
+				socket.write(".exit\n");
+				settle(() => resolve(raw));
+			}
+		});
+		socket.on("error", error => settle(() => reject(error)));
+		socket.on("end", () => {
+			if (raw.includes("PINKACORD_HOTPATCH_RESULT:")) settle(() => resolve(raw));
+		});
+	});
+}
 
 async function doHotpatch(): Promise<HotpatchResult> {
 	const wsUrl = `ws://${PS_WS_HOST}:${PS_WS_PORT}/showdown/websocket`;

@@ -29,6 +29,7 @@ declare global {
 			LoginServer: any;
 			Monitor: any;
 			nodeOomHeapdump: any;
+			PinkacordLiveHotpatch: any;
 			Punishments: any;
 			Rooms: any;
 			Sockets: any
@@ -48,6 +49,7 @@ declare global {
 	var Ladders: typeof LaddersType;
 	var LoginServer: typeof LoginServerType;
 	var Monitor: typeof MonitorType;
+	var PinkacordLiveHotpatch: any;
 	var Punishments: typeof PunishmentsType;
 	var Rooms: typeof RoomsType.Rooms;
 	var Sockets: typeof SocketsType.Sockets;

@@ -223,3 +223,16 @@ describe('Pinkacord admin HTTP', () => {
 		assert.equal(preview.status, 204);
 	});
 });
+
+describe('Pinkacord hosted publish pipeline', () => {
+	it('hotpatches the live server before publishing content drift', () => {
+		const source = fs.readFileSync(path.join(__dirname, '../../tools/pinkacord-admin/server.ts'), 'utf8');
+		const publishRoute = source.slice(source.indexOf('pathname === "/api/publish"'), source.indexOf('if (method === "POST" && pathname === "/api/build")'));
+		assert(publishRoute.includes('runHotpatch()'), 'hosted publish should hotpatch the running PS server');
+		assert(
+			publishRoute.indexOf('runHotpatch()') < publishRoute.indexOf('publishContent('),
+			'live hotpatch should happen before the GitHub publish step'
+		);
+		assert(publishRoute.includes('hotpatch'), 'publish response should include the hotpatch result for the UI');
+	});
+});

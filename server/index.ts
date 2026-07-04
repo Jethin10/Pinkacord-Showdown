@@ -126,6 +126,9 @@ function setupGlobals() {
 	const TeamValidatorAsync = require('./team-validator-async');
 	global.TeamValidatorAsync = TeamValidatorAsync;
 
+	const { PinkacordLiveHotpatch } = require('./pinkacord-live-hotpatch');
+	global.PinkacordLiveHotpatch = PinkacordLiveHotpatch;
+
 	global.Sockets = Sockets;
 	if (!Config.lazysockets) {
 		Sockets.start(Config.subprocessescache);

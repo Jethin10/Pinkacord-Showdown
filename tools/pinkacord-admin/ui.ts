@@ -3631,7 +3631,11 @@ async function doPublishAndDeploy() {
 		state.publishStatus = { changed: [], headSha: result.sha };
 		await refreshPublishStatus();
 		render();
-		setToast("success", "Published " + result.changed.length + " file(s). Render is redeploying now; changes should be live in a few minutes.", 12000);
+		const hp = result.hotpatch || {};
+		const liveText = (hp.mode === "internal" || hp.mode === "auto") ?
+			" Live server updated now." :
+			(hp.message ? " Live hotpatch: " + hp.message : "");
+		setToast("success", "Published " + result.changed.length + " file(s)." + liveText + " Render is redeploying now.", 12000);
 	} catch (err) {
 		const detail = err.fieldErrors && err.fieldErrors.length ? "\n• " + err.fieldErrors.slice(0, 5).join("\n• ") : "";
 		if (err.code === "no_changes") {
