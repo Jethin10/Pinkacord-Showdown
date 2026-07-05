@@ -23,7 +23,7 @@
 			if (this.curTeam) {
 				this.curTeam.iconCache = '!';
 				this.curTeam.gen = this.getGen(this.curTeam.format);
-				this.curTeam.dex = Dex.forGen(this.curTeam.gen);
+				this.curTeam.dex = Dex.forFormat(this.curTeam.format);
 				if (this.curTeam.format.includes('letsgo')) {
 					this.curTeam.dex = Dex.mod('gen7letsgo');
 				}
@@ -754,7 +754,7 @@
 			this.curTeam = teams[i];
 			this.curTeam.iconCache = '!';
 			this.curTeam.gen = this.getGen(this.curTeam.format);
-			this.curTeam.dex = Dex.forGen(this.curTeam.gen);
+			this.curTeam.dex = Dex.forFormat(this.curTeam.format);
 			if (this.curTeam.format.includes('letsgo')) {
 				this.curTeam.dex = Dex.mod('gen7letsgo');
 			}
@@ -1625,7 +1625,7 @@
 		changeFormat: function (format) {
 			this.curTeam.format = format;
 			this.curTeam.gen = this.getGen(this.curTeam.format);
-			this.curTeam.dex = Dex.forGen(this.curTeam.gen);
+			this.curTeam.dex = Dex.forFormat(this.curTeam.format);
 			if (this.curTeam.format.includes('letsgo')) {
 				this.curTeam.dex = Dex.mod('gen7letsgo');
 			}
@@ -3717,6 +3717,7 @@
 		getGen: function (format) {
 			format = '' + format;
 			if (!format) return 7;
+			if (format.includes('pinkacord')) return 9;
 			if (format.substr(0, 3) !== 'gen') return 6;
 			return parseInt(format.substr(3, 1), 10) || 6;
 		}

@@ -292,6 +292,10 @@ describe('Pinkacord hosted publish pipeline', () => {
 	it('resolves Pinkacord teambuilder searches as a Gen 9 custom mod', () => {
 		const dexSource = fs.readFileSync(path.join(__dirname, '../../client/play.pokemonshowdown.com/src/battle-dex.ts'), 'utf8');
 		assert(dexSource.includes("formatid.includes('pinkacord')"), 'client dex should treat Pinkacord format IDs as Gen 9');
+		assert(
+			dexSource.includes("const formatid = fullFormatid.startsWith('gen') ? fullFormatid.slice(4) : fullFormatid"),
+			'client dex should not strip custom Pinkacord format IDs before mod detection'
+		);
 		assert(dexSource.includes("Dex.mod('pinkacord' as ID)"), 'client dex should use the Pinkacord mod for Pinkacord teams');
 		assert(dexSource.includes("this.modid === 'pinkacord'"), 'client modded dex should support the Pinkacord mod ID');
 
@@ -313,13 +317,39 @@ describe('Pinkacord hosted publish pipeline', () => {
 			assert(pinkacordTable.includes(`${key}: BattleTeambuilderTable.${key}`), `Pinkacord table should include ${key}`);
 		}
 
-		for (const file of ['battle-dex.js', 'battle-dex-search.js']) {
+		for (const file of ['battle-dex.js', 'battledata.js', 'battle-dex-search.js']) {
 			const browserBundle = fs.readFileSync(
 				path.join(__dirname, '../../client/play.pokemonshowdown.com/js', file),
 				'utf8'
 			);
 			assert(browserBundle.includes('pinkacord'), `${file} should include the served Pinkacord teambuilder fix`);
 		}
+
+		const battleData = fs.readFileSync(
+			path.join(__dirname, '../../client/play.pokemonshowdown.com/js/battledata.js'),
+			'utf8'
+		);
+		assert(
+			battleData.includes("fullFormatid.startsWith('gen')?fullFormatid.slice(4):fullFormatid"),
+			'classic battledata bundle should preserve custom Pinkacord format IDs before mod detection'
+		);
+		assert(
+			battleData.includes("this.modid==='pinkacord'"),
+			'classic battledata bundle should construct the Pinkacord modded dex'
+		);
+
+		const teambuilderSource = fs.readFileSync(
+			path.join(__dirname, '../../client/play.pokemonshowdown.com/js/client-teambuilder.js'),
+			'utf8'
+		);
+		assert(
+			teambuilderSource.includes('Dex.forFormat(this.curTeam.format)'),
+			'classic Teambuilder should derive its active dex from the full format ID'
+		);
+		assert(
+			teambuilderSource.includes("if (format.includes('pinkacord')) return 9"),
+			'classic Teambuilder should treat Pinkacord formats as Gen 9'
+		);
 	});
 
 	it('uses the Pinkacord dex for the Pinkacord lobby format', () => {
