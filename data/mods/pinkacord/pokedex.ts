@@ -16,7 +16,7 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 			spe: 95,
 		},
 		abilities: {
-			"0": "Run Away",
+			"0": "Arctic Afterglow",
 		},
 		heightm: 1,
 		weightkg: 10,
