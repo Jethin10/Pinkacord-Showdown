@@ -1,4 +1,12 @@
 {
 	"schemaVersion": 1,
-	"items": []
+	"items": [
+		{
+			"id": "arcticafterglow",
+			"name": "Arctic Afterglow",
+			"shortDesc": "Summon Aurora Veil on entry",
+			"effects": [],
+			"breakable": false
+		}
+	]
 }
