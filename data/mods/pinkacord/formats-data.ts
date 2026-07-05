@@ -3,4 +3,8 @@
 // Generator: tools/pinkacord/generator.ts
 
 export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormatsDataTable = {
+	laprasmega: {
+		tier: "OU",
+		doublesTier: "DOU",
+	},
 };
