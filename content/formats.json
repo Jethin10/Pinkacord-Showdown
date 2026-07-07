@@ -48,7 +48,7 @@
 			"banlist": [],
 			"unbanlist": [],
 			"sharedPower": false,
-			"enabled": true
+			"enabled": false
 		}
 	]
 }

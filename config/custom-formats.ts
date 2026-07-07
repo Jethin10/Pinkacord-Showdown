@@ -12,12 +12,4 @@ export const Formats: import('../sim/dex-formats').FormatList = [
 		ruleset: ["Standard", "Evasion Clause"],
 		banlist: ["Uber", "AG", "Moody", "Shadow Tag", "Arena Trap", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects", "Shed Tail", "Tera Blast", "Ogerpon-Wellspring", "Kyurem", "Ceruledge"],
 	},
-	{
-		name: "[Pinkacord] NatDex",
-		desc: "National Dex Pinkacord format with Tera Preview.",
-		mod: "pinkacord",
-		gameType: "singles",
-		ruleset: ["Standard NatDex", "Tera Type Preview"],
-		banlist: [],
-	},
 ];
