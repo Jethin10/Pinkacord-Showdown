@@ -316,6 +316,24 @@ const setTerrainOnEntry = defineKind({
 	},`,
 });
 
+const setSideConditionOnEntry = defineKind({
+	id: "setSideConditionOnEntry",
+	description: "Set a side condition when this Pokemon switches in.",
+	paramsSchema: z.object({
+		condition: z.enum(["auroraveil", "reflect", "lightscreen", "safeguard", "mist", "tailwind"]),
+		duration: z.number().int().min(1).max(8),
+	}),
+	emit: ({ condition, duration }) => `
+	onStart(pokemon) {
+		if (!pokemon.side.addSideCondition('${condition}', pokemon, this.effect)) {
+			const state = pokemon.side.sideConditions['${condition}'];
+			if (state) state.duration = ${duration};
+			return;
+		}
+		pokemon.side.sideConditions['${condition}'].duration = ${duration};
+	},`,
+});
+
 const priorityBoostByType = defineKind({
 	id: "priorityBoostByType",
 	description: "Give a priority bonus to this Pokemon's moves of a given type (Gale Wings style) or category (Prankster style — use category 'Status').",
@@ -582,6 +600,16 @@ const itemPinchBoostByType = defineKind({
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+const itemCustomiteMegaStone = defineKind({
+	id: "itemCustomiteMegaStone",
+	description: "Generic Pinkacord Mega Stone for custom Mega formes.",
+	paramsSchema: z.object({}),
+	emit: () => `
+	onTakeItem(item, source) {
+		return !this.actions.canMegaEvo(source);
+	},`,
+});
+
 // Registry (lookup by id)
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -599,6 +627,7 @@ export const EFFECT_KINDS = {
 	weatherSpeedBoost,
 	setWeatherOnEntry,
 	setTerrainOnEntry,
+	setSideConditionOnEntry,
 	priorityBoostByType,
 	boostMovePowerWhenLowHp,
 	statusImmunity,
@@ -616,6 +645,7 @@ export const EFFECT_KINDS = {
 	itemCureStatus,
 	itemEjectAfterDamage,
 	itemPinchBoostByType,
+	itemCustomiteMegaStone,
 } as const;
 
 export type EffectKindId = keyof typeof EFFECT_KINDS;

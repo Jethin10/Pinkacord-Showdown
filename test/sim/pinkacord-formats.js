@@ -16,7 +16,7 @@ describe('Pinkacord formats content', () => {
 
 		assert(format, 'Expected pinkacordloweringpowercreep in content/formats.json');
 		assert.equal(format.name, '[Pinkacord] Lowering powercreep');
-		assert.equal(format.mod, 'gen9');
+		assert.equal(format.mod, 'pinkacord');
 		assert.equal(format.section, 'Pinkacord');
 		assert.equal(format.column, 1);
 		assert.equal(format.desc, 'Banning mons');
@@ -38,6 +38,23 @@ describe('Pinkacord formats content', () => {
 			'Kyurem',
 			'Ceruledge',
 		]);
+		assert.deepEqual(format.unbanlist, []);
+		assert.equal(format.sharedPower, false);
+		assert.equal(format.enabled, true);
+	});
+
+	it('defines Pinkacord NatDex with tera preview', () => {
+		const formats = readFormats();
+		const format = formats.find(f => f.id === 'pinkacordnatdex');
+
+		assert(format, 'Expected pinkacordnatdex in content/formats.json');
+		assert.equal(format.name, '[Pinkacord] NatDex');
+		assert.equal(format.mod, 'pinkacord');
+		assert.equal(format.section, 'Pinkacord');
+		assert.equal(format.column, 1);
+		assert.equal(format.gameType, 'singles');
+		assert.deepEqual(format.ruleset, ['Standard NatDex', 'Tera Type Preview']);
+		assert.deepEqual(format.banlist, []);
 		assert.deepEqual(format.unbanlist, []);
 		assert.equal(format.sharedPower, false);
 		assert.equal(format.enabled, true);

@@ -6,6 +6,8 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 	laprasmega: {
 		num: 10001,
 		name: "Lapras-Mega",
+		baseSpecies: "Lapras",
+		forme: "Mega",
 		types: ["Water", "Ice"],
 		baseStats: {
 			hp: 130,
@@ -22,5 +24,6 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 		weightkg: 10,
 		color: "Pink",
 		eggGroups: ["Field"],
+		requiredItem: "Customite",
 	},
 };

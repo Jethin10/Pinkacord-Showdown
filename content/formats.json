@@ -32,6 +32,23 @@
 			"unbanlist": [],
 			"sharedPower": false,
 			"enabled": true
+		},
+		{
+			"id": "pinkacordnatdex",
+			"name": "[Pinkacord] NatDex",
+			"mod": "pinkacord",
+			"section": "Pinkacord",
+			"column": 1,
+			"desc": "National Dex Pinkacord format with Tera Preview.",
+			"gameType": "singles",
+			"ruleset": [
+				"Standard NatDex",
+				"Tera Type Preview"
+			],
+			"banlist": [],
+			"unbanlist": [],
+			"sharedPower": false,
+			"enabled": true
 		}
 	]
 }

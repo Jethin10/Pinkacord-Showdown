@@ -7,8 +7,7 @@ export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {
 		num: 10300,
 		name: "testing object",
 		shortDesc: "A custom held item.f",
-	
-		onResidualOrder: 5,
+	onResidualOrder: 5,
 		onResidualSubOrder: 4,
 		onResidual(pokemon) {
 			if (pokemon.hp < pokemon.maxhp) {
@@ -21,14 +20,22 @@ export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {
 		num: 10303,
 		name: "Publish key",
 		shortDesc: "A custom held item.",
-	
-		onAfterMoveSecondary(target, source, move) {
+	onAfterMoveSecondary(target, source, move) {
 			if (source && source !== target && move && move.category !== 'Status' && target.hp) {
 				if (!source.isActive || !this.canSwitch(target.side)) return;
 				if (target.volatiles['substitute'] && !move.infiltrates) return;
 				this.add('-activate', target, 'item: Eject Button');
 				target.switchFlag = true;
 			}
+		},
+		gen: 9,
+	},
+	customite: {
+		num: 10304,
+		name: "Customite",
+		shortDesc: "Allows a custom Pinkacord Mega forme to Mega Evolve.",
+	onTakeItem(item, source) {
+			return !this.actions.canMegaEvo(source);
 		},
 		gen: 9,
 	},

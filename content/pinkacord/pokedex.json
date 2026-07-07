@@ -5,6 +5,8 @@
 			"id": "laprasmega",
 			"num": 10001,
 			"name": "Lapras-Mega",
+			"baseSpecies": "Lapras",
+			"forme": "Mega",
 			"types": [
 				"Water",
 				"Ice"
@@ -26,6 +28,7 @@
 			"eggGroups": [
 				"Field"
 			],
+			"requiredItem": "Customite",
 			"tier": "OU",
 			"doublesTier": "DOU"
 		}

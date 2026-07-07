@@ -4,8 +4,16 @@
 		{
 			"id": "arcticafterglow",
 			"name": "Arctic Afterglow",
-			"shortDesc": "Summon Aurora Veil on entry",
-			"effects": [],
+			"shortDesc": "On switch-in, sets Aurora Veil on the user's side for 4 turns.",
+			"effects": [
+				{
+					"kind": "setSideConditionOnEntry",
+					"params": {
+						"condition": "auroraveil",
+						"duration": 4
+					}
+				}
+			],
 			"breakable": false
 		}
 	]

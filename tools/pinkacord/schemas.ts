@@ -100,6 +100,8 @@ export const SpeciesSchema = z.object({
 	/** Dex number. Custom mons must be >= 10001 to avoid collision with PS base species. */
 	num: z.number().int().min(10001).max(99999),
 	name: DisplayNameSchema,
+	baseSpecies: DisplayNameSchema.optional(),
+	forme: DisplayNameSchema.optional(),
 	types: z.array(TypeSchema).min(1).max(2),
 	genderRatio: z.object({
 		M: z.number().min(0).max(1),
@@ -120,7 +122,10 @@ export const SpeciesSchema = z.object({
 	eggGroups: z.array(z.enum(EGG_GROUPS)).min(1).max(2),
 	prevo: DisplayNameSchema.optional(),
 	evos: z.array(DisplayNameSchema).optional(),
+	otherFormes: z.array(DisplayNameSchema).optional(),
+	formeOrder: z.array(DisplayNameSchema).optional(),
 	evoLevel: z.number().int().positive().optional(),
+	requiredItem: DisplayNameSchema.optional(),
 	tier: z.enum(TIERS).default("OU"),
 	doublesTier: z.enum(DOUBLES_TIERS).default("DOU"),
 	natDexTier: z.enum(TIERS).optional(),

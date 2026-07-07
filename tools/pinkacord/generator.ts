@@ -496,6 +496,8 @@ function emitPokedex(c: LoadedContent): string {
 		const obj: Record<string, unknown> = {
 			num: s.num,
 			name: s.name,
+			...(s.baseSpecies ? { baseSpecies: s.baseSpecies } : {}),
+			...(s.forme ? { forme: s.forme } : {}),
 			types: s.types,
 			...(s.gender ? { gender: s.gender } : {}),
 			...(s.genderRatio ? { genderRatio: s.genderRatio } : {}),
@@ -507,7 +509,10 @@ function emitPokedex(c: LoadedContent): string {
 			eggGroups: s.eggGroups,
 			...(s.prevo ? { prevo: s.prevo } : {}),
 			...(s.evos ? { evos: s.evos } : {}),
+			...(s.otherFormes ? { otherFormes: s.otherFormes } : {}),
+			...(s.formeOrder ? { formeOrder: s.formeOrder } : {}),
 			...(s.evoLevel ? { evoLevel: s.evoLevel } : {}),
+			...(s.requiredItem ? { requiredItem: s.requiredItem } : {}),
 		};
 		// "abilities" needs literal numeric keys 0/1 — tsLiteral already handles
 		// numeric keys via the safe-identifier check. Build the wrapper:
@@ -591,7 +596,7 @@ function emitAbilities(c: LoadedContent): string {
 			`\t\tname: ${JSON.stringify(a.name)},`,
 			...(a.shortDesc ? [`\t\tshortDesc: ${JSON.stringify(a.shortDesc)},`] : []),
 			...(a.desc ? [`\t\tdesc: ${JSON.stringify(a.desc)},`] : []),
-			handlerCode.trim() ? handlerCode.replace(/^/gm, "\t").trimEnd() : "",
+			handlerCode.trim() ? handlerCode.trim().replace(/^/gm, "\t") : "",
 			// Custom handler code (typically AI-authored). Emitted verbatim,
 			// indented one level. The schema caps length and the admin UI
 			// previews it before save.
@@ -623,7 +628,7 @@ function emitItems(c: LoadedContent): string {
 			`\t\tname: ${JSON.stringify(it.name)},`,
 			...(it.shortDesc ? [`\t\tshortDesc: ${JSON.stringify(it.shortDesc)},`] : []),
 			...(it.desc ? [`\t\tdesc: ${JSON.stringify(it.desc)},`] : []),
-			handlerCode.trim() ? handlerCode.replace(/^/gm, "\t").trimEnd() : "",
+			handlerCode.trim() ? handlerCode.trim().replace(/^/gm, "\t") : "",
 			`\t\tgen: 9,`,
 			`\t},`
 		);
@@ -703,8 +708,42 @@ const SHAREDPOWER_SCRIPT_PATCH = `
 \t},
 `;
 
+const CUSTOMITE_SCRIPT_PATCH = `
+\tactions: {
+\t\tcanMegaEvo(pokemon) {
+\t\t\tconst species = pokemon.baseSpecies;
+\t\t\tconst item = pokemon.getItem();
+\t\t\tif (item.id === 'customite') {
+\t\t\t\tconst megaSpecies = this.dex.species.get(species.baseSpecies + '-Mega');
+\t\t\t\tif (
+\t\t\t\t\tmegaSpecies.exists &&
+\t\t\t\t\tmegaSpecies.isMega &&
+\t\t\t\t\tmegaSpecies.baseSpecies === species.baseSpecies &&
+\t\t\t\t\tmegaSpecies.requiredItem === item.name &&
+\t\t\t\t\tthis.dex.data.Pokedex[megaSpecies.id]?.num >= 10001
+\t\t\t\t) {
+\t\t\t\t\treturn megaSpecies.name;
+\t\t\t\t}
+\t\t\t}
+\t\t\tconst altForme = species.otherFormes && this.dex.species.get(species.otherFormes[0]);
+\t\t\tif ((this.battle.gen <= 7 || this.battle.ruleTable.has('+pokemontag:past') ||
+\t\t\t\tthis.battle.ruleTable.has('+pokemontag:future')) &&
+\t\t\t\taltForme?.isMega && altForme?.requiredMove &&
+\t\t\t\tpokemon.baseMoves.includes(this.battle.toID(altForme.requiredMove)) && !item.zMove) {
+\t\t\t\treturn altForme.name;
+\t\t\t}
+\t\t\tif (!item.megaStone) return null;
+\t\t\tlet megaEvolution = item.megaStone[species.name];
+\t\t\tif (megaEvolution && this.dex.species.get(megaEvolution).gen >= 9) return megaEvolution;
+\t\t\tmegaEvolution = item.megaStone[species.baseSpecies];
+\t\t\treturn megaEvolution && megaEvolution !== species.name ? megaEvolution : null;
+\t\t},
+\t},
+`;
+
 function emitScripts(c: LoadedContent): string {
 	const needsSharedPower = c.formats.some((f) => f.enabled !== false && f.sharedPower);
+	const needsCustomite = c.items.some((it) => it.effects.some((eff) => eff.kind === "itemCustomiteMegaStone"));
 	const lines = [
 		GENERATED_BANNER,
 		`export const Scripts: ModdedBattleScriptsData = {`,
@@ -712,6 +751,7 @@ function emitScripts(c: LoadedContent): string {
 		`\tinherit: ${JSON.stringify(c.meta.parentMod)},`,
 	];
 	if (needsSharedPower) lines.push(SHAREDPOWER_SCRIPT_PATCH);
+	if (needsCustomite) lines.push(CUSTOMITE_SCRIPT_PATCH);
 	lines.push(`};`, "");
 	return lines.join("\n");
 }

@@ -5,8 +5,15 @@
 export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTable = {
 	arcticafterglow: {
 		name: "Arctic Afterglow",
-		shortDesc: "Summon Aurora Veil on entry",
-
+		shortDesc: "On switch-in, sets Aurora Veil on the user's side for 4 turns.",
+	onStart(pokemon) {
+			if (!pokemon.side.addSideCondition('auroraveil', pokemon, this.effect)) {
+				const state = pokemon.side.sideConditions['auroraveil'];
+				if (state) state.duration = 4;
+				return;
+			}
+			pokemon.side.sideConditions['auroraveil'].duration = 4;
+		},
 		flags: {},
 		gen: 9,
 	},

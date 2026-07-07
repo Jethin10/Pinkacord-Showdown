@@ -55,6 +55,10 @@ function vanillaFiller(f: { name: string; ability: string; move: string }): stri
 	return `${f.name}\nAbility: ${f.ability}\nEVs: 4 HP\nLevel: 100\n- ${f.move}`;
 }
 
+function findVanillaFiller(name: string) {
+	return VANILLA_FILLERS.find((f) => f.name.toLowerCase() === name.toLowerCase());
+}
+
 function buildVanillaTeam(gameType: string = "singles", minTeamSize = 0): string {
 	const needed = Math.max(minTeamSize, gameType === "doubles" ? 2 : 1);
 	return VANILLA_FILLERS.slice(0, needed).map(vanillaFiller).join("\n\n");
@@ -79,6 +83,12 @@ function buildCanonicalTeam(content: LoadedContent, gameType: string = "singles"
 	const ability = species.abilities.H ?? species.abilities["0"];
 
 	const monBlock = (sp: typeof species, mvs: string[]) => {
+		if (sp.baseSpecies && sp.requiredItem) {
+			const filler = findVanillaFiller(sp.baseSpecies);
+			if (filler) {
+				return `${filler.name} @ ${sp.requiredItem}\nAbility: ${filler.ability}\nTera Type: ${sp.types[0]}\nEVs: 4 HP\nLevel: 100\n- ${filler.move}`;
+			}
+		}
 		const abil = sp.abilities.H ?? sp.abilities["0"];
 		const lines = [
 			`${sp.name} @ Choice Specs`,

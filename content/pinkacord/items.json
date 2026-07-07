@@ -26,6 +26,18 @@
 					"params": {}
 				}
 			]
+		},
+		{
+			"id": "customite",
+			"num": 10304,
+			"name": "Customite",
+			"shortDesc": "Allows a custom Pinkacord Mega forme to Mega Evolve.",
+			"effects": [
+				{
+					"kind": "itemCustomiteMegaStone",
+					"params": {}
+				}
+			]
 		}
 	]
 }
