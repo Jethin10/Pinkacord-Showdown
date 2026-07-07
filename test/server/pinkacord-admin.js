@@ -303,9 +303,13 @@ describe('Pinkacord hosted publish pipeline', () => {
 			path.join(__dirname, '../../client/play.pokemonshowdown.com/src/battle-dex-search.ts'),
 			'utf8'
 		);
-		assert(searchSource.includes("'pinkacord' | null"), 'typed search should have a Pinkacord format type');
-		assert(searchSource.includes("this.formatType = 'pinkacord'"), 'typed search should detect Pinkacord formats');
+		assert(searchSource.includes("'pinkacord' | 'pinkacordnatdex' | null"), 'typed search should have Pinkacord format types');
+		assert(
+			searchSource.includes("this.formatType = format.includes('natdex') ? 'pinkacordnatdex' : 'pinkacord'"),
+			'typed search should detect Pinkacord and Pinkacord NatDex formats'
+		);
 		assert(searchSource.includes("table = table['pinkacord']"), 'typed search should read Pinkacord teambuilder tables');
+		assert(searchSource.includes("table = table['pinkacordnatdex']"), 'typed search should read Pinkacord NatDex teambuilder tables');
 
 		const buildSource = fs.readFileSync(path.join(__dirname, '../../tools/build-client.js'), 'utf8');
 		const pinkacordTable = extractBlock(

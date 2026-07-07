@@ -3,6 +3,11 @@
 // Generator: tools/pinkacord/generator.ts
 
 export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable = {
+	lapras: {
+		inherit: true,
+		otherFormes: ["Lapras-Mega"],
+		formeOrder: ["Lapras", "Lapras-Mega"],
+	},
 	laprasmega: {
 		num: 10001,
 		name: "Lapras-Mega",

@@ -487,11 +487,27 @@ function tsLiteral(value: unknown, indent: string): string {
 
 // Pokedex.ts ────────────────────────────────────────────────────────────────
 
+function toID(text: string): string {
+	return text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function customMegaSpecies(c: LoadedContent): Species[] {
+	return c.species.filter(s => s.forme === "Mega" && s.baseSpecies && s.requiredItem);
+}
+
 function emitPokedex(c: LoadedContent): string {
 	const lines = [
 		GENERATED_BANNER,
 		`export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable = {`,
 	];
+	for (const s of customMegaSpecies(c)) {
+		const obj = {
+			inherit: true,
+			otherFormes: [s.name],
+			formeOrder: [s.baseSpecies, s.name],
+		};
+		lines.push(`\t${toID(s.baseSpecies!)}: ${tsLiteral(obj, "\t")},`);
+	}
 	for (const s of c.species) {
 		const obj: Record<string, unknown> = {
 			num: s.num,
@@ -620,14 +636,21 @@ function emitItems(c: LoadedContent): string {
 		GENERATED_BANNER,
 		`export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {`,
 	];
+	const customMegas = customMegaSpecies(c);
 	for (const it of c.items) {
 		const handlerCode = emitEffects(it.effects);
+		const isCustomite = it.effects.some(eff => eff.kind === "itemCustomiteMegaStone");
+		const itemMegas = customMegas.filter(s => s.requiredItem === it.name);
+		const megaStone = Object.fromEntries(itemMegas.map(s => [s.baseSpecies!, s.name]));
+		const itemUser = itemMegas.map(s => s.baseSpecies!);
 		lines.push(
 			`\t${it.id}: {`,
 			`\t\tnum: ${it.num},`,
 			`\t\tname: ${JSON.stringify(it.name)},`,
 			...(it.shortDesc ? [`\t\tshortDesc: ${JSON.stringify(it.shortDesc)},`] : []),
 			...(it.desc ? [`\t\tdesc: ${JSON.stringify(it.desc)},`] : []),
+			...(isCustomite && itemMegas.length ? [`\t\tmegaStone: ${tsLiteral(megaStone, "\t\t")},`] : []),
+			...(isCustomite && itemUser.length ? [`\t\titemUser: ${tsLiteral(itemUser, "\t\t")},`] : []),
 			handlerCode.trim() ? handlerCode.trim().replace(/^/gm, "\t") : "",
 			`\t\tgen: 9,`,
 			`\t},`

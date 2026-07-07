@@ -657,7 +657,7 @@ format=format.slice(9);
 if(format!=='ou'&&format.length>2)format='ubers';
 }
 if(format.includes('pinkacord')){
-this.formatType='pinkacord';
+this.formatType=format.includes('natdex')?'pinkacordnatdex':'pinkacord';
 this.dex=Dex.mod('pinkacord');
 format=format.slice(9);
 }
@@ -703,7 +703,7 @@ this.dex=Dex.mod('gen7letsgo');
 if(format.includes('nationaldex')||format.startsWith('nd')||format.includes('natdex')){
 format=format.startsWith('nd')?format.slice(2):
 format.includes('natdex')?format.slice(6):format.slice(11);
-this.formatType='natdex';
+this.formatType=this.formatType==='pinkacordnatdex'?'pinkacordnatdex':'natdex';
 if(!format)format='ou';
 this.isDoubles=format.includes('doubles');
 }
@@ -832,6 +832,7 @@ if(this.formatType==='frlg')table=table['gen3frlg'];
 if(this.formatType==='legendsza')table=table['gen9legendsou'];
 if(this.formatType==='champions')table=table['champions'];
 if(this.formatType==='pinkacord')table=table['pinkacord'];
+if(this.formatType==='pinkacordnatdex')table=table['pinkacordnatdex'];
 if(speciesid in table.learnsets)return speciesid;
 var species=this.dex.species.get(speciesid);
 if(!species.exists)return'';
@@ -871,7 +872,7 @@ return'';
 };_proto2.
 canLearn=function canLearn(speciesid,moveid){
 var move=this.dex.moves.get(moveid);
-if((this.formatType==='natdex'||this.formatType==='legendsza')&&
+if((this.formatType==='natdex'||this.formatType==='pinkacordnatdex'||this.formatType==='legendsza')&&
 move.isNonstandard&&move.isNonstandard!=='Past'){
 return false;
 }
@@ -883,7 +884,7 @@ this.format.startsWith('bss')||
 this.format.startsWith('battlespot')||
 this.format.startsWith('battlestadium')||
 this.format.startsWith('battlefestival')||
-this.dex.gen===9&&this.formatType!=='natdex'&&this.formatType!=='legendsza')
+this.dex.gen===9&&this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex'&&this.formatType!=='legendsza')
 {
 if(gen===9){
 genChar='a';
@@ -906,6 +907,7 @@ if(this.formatType==='frlg')table=table['gen3frlg'];
 if(this.formatType==='legendsza')table=table['gen9legendsou'];
 if(this.formatType==='champions')table=table['champions'];
 if(this.formatType==='pinkacord')table=table['pinkacord'];
+if(this.formatType==='pinkacordnatdex')table=table['pinkacordnatdex'];
 var learnset=table.learnsets[learnsetid];
 var eggMovesOnly=this.eggMovesOnly(learnsetid,speciesid);
 if(learnset&&moveid in learnset&&(!this.format.startsWith('tradebacks')?learnset[moveid].includes(genChar):
@@ -942,6 +944,7 @@ this.formatType==='svdlc1'?'gen9dlc1':
 this.formatType==='svdlc1doubles'?'gen9dlc1doubles':
 this.formatType==='svdlc1natdex'?'gen9dlc1natdex':
 this.formatType==='natdex'?"gen"+gen+"natdex":
+this.formatType==='pinkacordnatdex'?"pinkacordnatdex":
 this.formatType==='stadium'?"gen"+gen+"stadium"+(gen>1?gen:''):
 this.formatType==='legendsza'?"gen9legendsou":
 this.formatType==='champions'?"champions":
@@ -1048,6 +1051,8 @@ table=table["gen"+dex.gen];
 table=table["champions"];
 }else if(this.formatType==='pinkacord'){
 table=table['pinkacord'];
+}else if(this.formatType==='pinkacordnatdex'){
+table=table['pinkacordnatdex'];
 }else if(isVGCOrBS){
 table=table["gen"+dex.gen+"vgc"];
 }else if(dex.gen===9&&isHackmons&&!this.formatType){
@@ -1079,6 +1084,8 @@ table=table['gen3rs'];
 table=table['gen3frlg'];
 }else if(this.formatType==='natdex'){
 table=table["gen"+dex.gen+"natdex"];
+}else if(this.formatType==='pinkacordnatdex'){
+table=table['pinkacordnatdex'];
 }else if(this.formatType==='metronome'){
 table=table["gen"+dex.gen+"metronome"];
 }else if(this.formatType==='nfe'){
@@ -1167,7 +1174,7 @@ tierSet=tierSet.slice(0,slices.AG||slices.Uber).concat(tierSet.slice(slices.OU))
 tierSet=tierSet.slice(slices['CAP LC'],slices.AG||slices.Uber).concat(tierSet.slice(slices.LC));
 }else if(format==='anythinggoes'||format.endsWith('ag')||format.startsWith('ag')){
 tierSet=tierSet.slice(slices.AG);
-}else if(isHackmons&&(dex.gen<9||this.formatType==='natdex')){
+}else if(isHackmons&&(dex.gen<9||this.formatType==='natdex'||this.formatType==='pinkacordnatdex')){
 tierSet=tierSet.slice(slices.AG||slices.Uber);
 }else if(format==='monotype'||format.startsWith('monothreat'))tierSet=tierSet.slice(slices.Uber);else
 if(format==='doublesubers')tierSet=tierSet.slice(slices.DUber);else
@@ -1223,7 +1230,7 @@ return false;
 return true;
 });
 }
-if((format==='doubles'||format==='monotype')&&this.formatType==='natdex'&&(_table$metagameBans2=table.metagameBans)!=null&&_table$metagameBans2[format]){
+if((format==='doubles'||format==='monotype')&&(this.formatType==='natdex'||this.formatType==='pinkacordnatdex')&&(_table$metagameBans2=table.metagameBans)!=null&&_table$metagameBans2[format]){
 tierSet=tierSet.filter(function(_ref7){var type=_ref7[0],id=_ref7[1];
 if(id in table.metagameBans[format])return false;
 if('miraidon'in table.metagameBans[format]&&'calyrexshadow'in table.metagameBans[format]&&
@@ -1239,7 +1246,7 @@ return false;
 });
 }
 if(dex.gen>=5){var _table$metagameBans4;
-if(this.formatType!=='natdex'&&(
+if(this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex'&&(
 format==='monotype'||format.startsWith('monothreat'))&&(_table$metagameBans4=table.metagameBans)!=null&&_table$metagameBans4.monotype){
 tierSet=tierSet.filter(function(_ref9){var type=_ref9[0],id=_ref9[1];
 if(id in table.metagameBans.monotype)return false;
@@ -1249,7 +1256,7 @@ return true;
 }
 
 
-if(!(/^(battlestadium|vgc|doublesubers)/g.test(format)||format==='doubles'&&this.formatType==='natdex')){
+if(!(/^(battlestadium|vgc|doublesubers)/g.test(format)||format==='doubles'&&(this.formatType==='natdex'||this.formatType==='pinkacordnatdex'))){
 tierSet=tierSet.filter(function(_ref10){var type=_ref10[0],id=_ref10[1];
 if(type==='header'&&id==='DUber by technicality')return false;
 if(type==='header'&&id==='Uber by technicality')return false;
@@ -1429,6 +1436,8 @@ table=table["gen9legendsou"];
 table=table["champions"];
 }else if(this.formatType==='pinkacord'){
 table=table['pinkacord'];
+}else if(this.formatType==='pinkacordnatdex'){
+table=table['pinkacordnatdex'];
 }else if(this.dex.gen<9){
 table=table["gen"+this.dex.gen];
 }
@@ -1803,7 +1812,7 @@ var isSTABmons=format.includes('stabmons')||format==='staaabmons';
 var isTradebacks=format.includes('tradebacks');
 var regionBornLegality=dex.gen>=6&&(
 /^battle(spot|stadium|festival)/.test(format)||format.startsWith('bss')||
-format.startsWith('vgc')||dex.gen===9&&this.formatType!=='natdex'&&this.formatType!=='legendsza');
+format.startsWith('vgc')||dex.gen===9&&this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex'&&this.formatType!=='legendsza');
 
 var learnsetid=this.firstLearnsetid(species.id);
 var moves=[];
@@ -1819,6 +1828,7 @@ if(this.formatType==='frlg')lsetTable=lsetTable['gen3frlg'];
 if(this.formatType==='legendsza')lsetTable=lsetTable['gen9legendsou'];
 if(this.formatType==='champions')lsetTable=lsetTable['champions'];
 if(this.formatType==='pinkacord')lsetTable=lsetTable['pinkacord'];
+if(this.formatType==='pinkacordnatdex')lsetTable=lsetTable['pinkacordnatdex'];
 if((_this$formatType15=this.formatType)!=null&&_this$formatType15.startsWith('ssdlc1'))lsetTable=lsetTable['gen8dlc1'];
 if((_this$formatType16=this.formatType)!=null&&_this$formatType16.startsWith('predlc'))lsetTable=lsetTable['gen9predlc'];
 if((_this$formatType17=this.formatType)!=null&&_this$formatType17.startsWith('svdlc1'))lsetTable=lsetTable['gen9dlc1'];
@@ -1844,7 +1854,7 @@ if(
 {
 continue;
 }
-if(this.formatType!=='natdex'&&this.formatType!=='legendsza'&&move.isNonstandard==="Past"){
+if(this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex'&&this.formatType!=='legendsza'&&move.isNonstandard==="Past"){
 continue;
 }
 if(
@@ -1886,13 +1896,13 @@ if(_move.gen>dex.gen||!_move.exists)continue;
 if(sketch){
 if(_move.flags['nosketch']||_move.isMax||_move.isZ)continue;
 if(_move.isNonstandard&&_move.isNonstandard!=='Past')continue;
-if(_move.isNonstandard==='Past'&&this.formatType!=='natdex')continue;
+if(_move.isNonstandard==='Past'&&this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex')continue;
 sketchMoves.push(_move.id);
 }else{
-if(!(dex.gen<8||this.formatType==='natdex')&&_move.isZ)continue;
+if(!(dex.gen<8||this.formatType==='natdex'||this.formatType==='pinkacordnatdex')&&_move.isZ)continue;
 if(typeof _move.isMax==='string')continue;
 if(_move.isMax&&dex.gen>8)continue;
-if(_move.isNonstandard==='Past'&&this.formatType!=='natdex')continue;
+if(_move.isNonstandard==='Past'&&this.formatType!=='natdex'&&this.formatType!=='pinkacordnatdex')continue;
 if(_move.isNonstandard==='LGPE'&&this.formatType!=='letsgo')continue;
 moves.push(_move.id);
 }

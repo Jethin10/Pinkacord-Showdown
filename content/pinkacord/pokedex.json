@@ -29,8 +29,9 @@
 				"Field"
 			],
 			"requiredItem": "Customite",
-			"tier": "OU",
-			"doublesTier": "DOU"
+			"tier": "Illegal",
+			"doublesTier": "DOU",
+			"natDexTier": "OU"
 		}
 	]
 }

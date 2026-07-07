@@ -45,6 +45,18 @@ function rebuildPs(): void {
 	});
 }
 
+function rebuildClientData(): void {
+	console.log("  -> rebuilding browser teambuilder data ...");
+	execFileSync(process.execPath, ["tools/build-client.js"], {
+		cwd: REPO_ROOT,
+		stdio: "inherit",
+	});
+	execFileSync(process.execPath, ["tools/copy-client.js"], {
+		cwd: REPO_ROOT,
+		stdio: "inherit",
+	});
+}
+
 function cmdBuild(modId: string): void {
 	console.log(`pinkacord build: mod="${modId}"`);
 	try {
@@ -55,6 +67,7 @@ function cmdBuild(modId: string): void {
 		console.log(`  Stats: ${JSON.stringify(result.stats)}`);
 
 		rebuildPs();
+		rebuildClientData();
 
 		console.log("  → running smoke test ...");
 		const results = runSmokeTest(modId);

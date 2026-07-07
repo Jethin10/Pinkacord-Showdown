@@ -44,7 +44,17 @@ function loadMergedData(file, exportName) {
 	try {
 		mod = requireNoCache(`../dist/data/mods/pinkacord/${file}.js`)[exportName] || {};
 	} catch {}
-	return { ...base, ...mod };
+	const merged = { ...base };
+	for (const id in mod) {
+		const entry = mod[id];
+		if (entry?.inherit) {
+			const { inherit, ...rest } = entry;
+			merged[id] = { ...base[id], ...rest };
+		} else {
+			merged[id] = entry;
+		}
+	}
+	return merged;
 }
 
 function compactLearnsetEntry(sources) {
@@ -103,7 +113,7 @@ function buildItemRows(Items) {
 	return rows;
 }
 
-function buildTierRows(Pokedex, FormatsData) {
+function buildTierRows(Pokedex, FormatsData, useNatDexTier = false) {
 	const tierOrder = [
 		'AG', 'Uber', 'OU', 'UUBL', 'UU', 'RUBL', 'RU', 'NUBL', 'NU', 'PUBL',
 		'PU', 'ZUBL', 'ZU', 'NFE', 'LC', 'CAP', 'Unreleased', 'Illegal',
@@ -111,8 +121,16 @@ function buildTierRows(Pokedex, FormatsData) {
 	const buckets = {};
 	for (const id in Pokedex) {
 		const species = Pokedex[id];
-		if (species.isNonstandard === 'Past' || species.isNonstandard === 'CAP' && species.tier !== 'CAP') continue;
-		const tier = FormatsData[id]?.tier || species.tier || 'Illegal';
+		const formatsEntry = FormatsData[id] || {};
+		const isNonstandard = formatsEntry.isNonstandard || species.isNonstandard;
+		if (useNatDexTier) {
+			if (isNonstandard && !['Past', 'CAP'].includes(isNonstandard)) continue;
+		} else if (isNonstandard === 'Past' || isNonstandard === 'CAP' && species.tier !== 'CAP') {
+			continue;
+		}
+		const tier = useNatDexTier ?
+			(formatsEntry.natDexTier || species.natDexTier || formatsEntry.tier || species.tier || 'Illegal') :
+			(formatsEntry.tier || species.tier || 'Illegal');
 		if (!buckets[tier]) buckets[tier] = [];
 		buckets[tier].push(id);
 	}
@@ -130,6 +148,18 @@ function buildTierRows(Pokedex, FormatsData) {
 		}));
 	}
 	return rows;
+}
+
+function buildOverrideTier(Pokedex, FormatsData, useNatDexTier = false) {
+	const overrideTier = {};
+	for (const id in Pokedex) {
+		const formatsEntry = FormatsData[id] || {};
+		const tier = useNatDexTier ?
+			(formatsEntry.natDexTier || Pokedex[id].natDexTier || formatsEntry.tier || Pokedex[id].tier) :
+			(formatsEntry.tier || Pokedex[id].tier);
+		if (tier) overrideTier[id] = tier;
+	}
+	return overrideTier;
 }
 
 function buildFormatSlices(tiers) {
@@ -357,6 +387,8 @@ process.stdout.write('Building `data/teambuilder-tables.js`... ');
 	const FormatsData = loadMergedData('formats-data', 'FormatsData');
 	const Items = loadMergedData('items', 'Items');
 	const Learnsets = loadMergedData('learnsets', 'Learnsets');
+	const natDexTiers = buildTierRows(Pokedex, FormatsData, true);
+	const natDexOverrideTier = buildOverrideTier(Pokedex, FormatsData, true);
 
 	const BattleTeambuilderTable = {
 		tiers: buildTierRows(Pokedex, FormatsData),
@@ -372,10 +404,7 @@ process.stdout.write('Building `data/teambuilder-tables.js`... ');
 		removeType: {},
 	};
 
-	for (const id in Pokedex) {
-		const tier = FormatsData[id]?.tier || Pokedex[id].tier;
-		if (tier) BattleTeambuilderTable.overrideTier[id] = tier;
-	}
+	BattleTeambuilderTable.overrideTier = buildOverrideTier(Pokedex, FormatsData);
 	BattleTeambuilderTable.formatSlices = buildFormatSlices(BattleTeambuilderTable.tiers);
 	BattleTeambuilderTable.pinkacord = {
 		tiers: BattleTeambuilderTable.tiers,
@@ -383,6 +412,19 @@ process.stdout.write('Building `data/teambuilder-tables.js`... ');
 		learnsets: BattleTeambuilderTable.learnsets,
 		overrideTier: BattleTeambuilderTable.overrideTier,
 		formatSlices: BattleTeambuilderTable.formatSlices,
+		overrideMoveData: {},
+		overrideItemData: {},
+		overrideAbilityData: {},
+		overrideSpeciesData: {},
+		overrideTypeChart: {},
+		removeType: {},
+	};
+	BattleTeambuilderTable.pinkacordnatdex = {
+		tiers: natDexTiers,
+		items: BattleTeambuilderTable.items,
+		learnsets: BattleTeambuilderTable.learnsets,
+		overrideTier: natDexOverrideTier,
+		formatSlices: buildFormatSlices(natDexTiers),
 		overrideMoveData: {},
 		overrideItemData: {},
 		overrideAbilityData: {},

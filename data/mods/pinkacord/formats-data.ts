@@ -4,7 +4,8 @@
 
 export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormatsDataTable = {
 	laprasmega: {
-		tier: "OU",
+		tier: "Illegal",
 		doublesTier: "DOU",
+		natDexTier: "OU",
 	},
 };

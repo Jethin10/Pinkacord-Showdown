@@ -34,6 +34,10 @@ export const Items: import('../../../sim/dex-items').ModdedItemDataTable = {
 		num: 10304,
 		name: "Customite",
 		shortDesc: "Allows a custom Pinkacord Mega forme to Mega Evolve.",
+		megaStone: {
+			Lapras: "Lapras-Mega",
+		},
+		itemUser: ["Lapras"],
 	onTakeItem(item, source) {
 			return !this.actions.canMegaEvo(source);
 		},

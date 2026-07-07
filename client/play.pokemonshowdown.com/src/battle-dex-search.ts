@@ -582,7 +582,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 
 	protected formatType: 'doubles' | 'bdsp' | 'bdspdoubles' | 'rs' | 'frlg' | 'bw1' | 'letsgo' | 'metronome' | 'natdex' |
 		'nfe' | 'ssdlc1' | 'ssdlc1doubles' | 'predlc' | 'predlcdoubles' | 'predlcnatdex' | 'svdlc1' | 'svdlc1doubles' |
-		'svdlc1natdex' | 'stadium' | 'lc' | 'legendsza' | 'champions' | 'pinkacord' | null = null;
+		'svdlc1natdex' | 'stadium' | 'lc' | 'legendsza' | 'champions' | 'pinkacord' | 'pinkacordnatdex' | null = null;
 	isDoubles = false;
 
 	/**
@@ -657,7 +657,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			if (format !== 'ou' && format.length > 2) format = 'ubers' as ID;
 		}
 		if (format.includes('pinkacord')) {
-			this.formatType = 'pinkacord';
+			this.formatType = format.includes('natdex') ? 'pinkacordnatdex' : 'pinkacord';
 			this.dex = Dex.mod('pinkacord' as ID);
 			format = format.slice(9) as ID;
 		}
@@ -703,7 +703,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 		if (format.includes('nationaldex') || format.startsWith('nd') || format.includes('natdex')) {
 			format = (format.startsWith('nd') ? format.slice(2) :
 				format.includes('natdex') ? format.slice(6) : format.slice(11)) as ID;
-			this.formatType = 'natdex';
+			this.formatType = this.formatType === 'pinkacordnatdex' ? 'pinkacordnatdex' : 'natdex';
 			if (!format) format = 'ou' as ID;
 			this.isDoubles = format.includes('doubles');
 		}
@@ -832,6 +832,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 		if (this.formatType === 'legendsza') table = table['gen9legendsou'];
 		if (this.formatType === 'champions') table = table['champions'];
 		if (this.formatType === 'pinkacord') table = table['pinkacord'];
+		if (this.formatType === 'pinkacordnatdex') table = table['pinkacordnatdex'];
 		if (speciesid in table.learnsets) return speciesid;
 		const species = this.dex.species.get(speciesid);
 		if (!species.exists) return '' as ID;
@@ -871,7 +872,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 	}
 	protected canLearn(speciesid: ID, moveid: ID) {
 		const move = this.dex.moves.get(moveid);
-		if ((this.formatType === 'natdex' || this.formatType === 'legendsza') &&
+		if ((this.formatType === 'natdex' || this.formatType === 'pinkacordnatdex' || this.formatType === 'legendsza') &&
 			move.isNonstandard && move.isNonstandard !== 'Past') {
 			return false;
 		}
@@ -883,7 +884,8 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			this.format.startsWith('battlespot') ||
 			this.format.startsWith('battlestadium') ||
 			this.format.startsWith('battlefestival') ||
-			(this.dex.gen === 9 && this.formatType !== 'natdex' && this.formatType !== 'legendsza')
+			(this.dex.gen === 9 && this.formatType !== 'natdex' &&
+				this.formatType !== 'pinkacordnatdex' && this.formatType !== 'legendsza')
 		) {
 			if (gen === 9) {
 				genChar = 'a';
@@ -906,6 +908,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			if (this.formatType === 'legendsza') table = table['gen9legendsou'];
 			if (this.formatType === 'champions') table = table['champions'];
 			if (this.formatType === 'pinkacord') table = table['pinkacord'];
+			if (this.formatType === 'pinkacordnatdex') table = table['pinkacordnatdex'];
 			let learnset = table.learnsets[learnsetid];
 			const eggMovesOnly = this.eggMovesOnly(learnsetid, speciesid);
 			if (learnset && (moveid in learnset) && (!this.format.startsWith('tradebacks') ? learnset[moveid].includes(genChar) :
@@ -942,6 +945,7 @@ abstract class BattleTypedSearch<T extends SearchType> {
 			this.formatType === 'svdlc1doubles' ? 'gen9dlc1doubles' :
 			this.formatType === 'svdlc1natdex' ? 'gen9dlc1natdex' :
 			this.formatType === 'natdex' ? `gen${gen}natdex` :
+			this.formatType === 'pinkacordnatdex' ? `pinkacordnatdex` :
 			this.formatType === 'stadium' ? `gen${gen}stadium${gen > 1 ? gen : ''}` :
 			this.formatType === 'legendsza' ? `gen9legendsou` :
 			this.formatType === 'champions' ? `champions` :
@@ -1048,6 +1052,8 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 			table = table[`champions`];
 		} else if (this.formatType === 'pinkacord') {
 			table = table['pinkacord'];
+		} else if (this.formatType === 'pinkacordnatdex') {
+			table = table['pinkacordnatdex'];
 		} else if (isVGCOrBS) {
 			table = table[`gen${dex.gen}vgc`];
 		} else if (dex.gen === 9 && isHackmons && !this.formatType) {
@@ -1079,6 +1085,8 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 			table = table['gen3frlg'];
 		} else if (this.formatType === 'natdex') {
 			table = table[`gen${dex.gen}natdex`];
+		} else if (this.formatType === 'pinkacordnatdex') {
+			table = table['pinkacordnatdex'];
 		} else if (this.formatType === 'metronome') {
 			table = table[`gen${dex.gen}metronome`];
 		} else if (this.formatType === 'nfe') {
@@ -1167,7 +1175,7 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 			tierSet = tierSet.slice(slices['CAP LC'], slices.AG || slices.Uber).concat(tierSet.slice(slices.LC));
 		} else if (format === 'anythinggoes' || format.endsWith('ag') || format.startsWith('ag')) {
 			tierSet = tierSet.slice(slices.AG);
-		} else if (isHackmons && (dex.gen < 9 || this.formatType === 'natdex')) {
+		} else if (isHackmons && (dex.gen < 9 || this.formatType === 'natdex' || this.formatType === 'pinkacordnatdex')) {
 			tierSet = tierSet.slice(slices.AG || slices.Uber);
 		} else if (format === 'monotype' || format.startsWith('monothreat')) tierSet = tierSet.slice(slices.Uber);
 		else if (format === 'doublesubers') tierSet = tierSet.slice(slices.DUber);
@@ -1223,7 +1231,8 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 					return true;
 				});
 			}
-			if ((format === 'doubles' || format === 'monotype') && this.formatType === 'natdex' && table.metagameBans?.[format]) {
+			if ((format === 'doubles' || format === 'monotype') &&
+				(this.formatType === 'natdex' || this.formatType === 'pinkacordnatdex') && table.metagameBans?.[format]) {
 				tierSet = tierSet.filter(([type, id]) => {
 					if (id in table.metagameBans[format]) return false;
 					if ('miraidon' in table.metagameBans[format] && 'calyrexshadow' in table.metagameBans[format] &&
@@ -1239,7 +1248,7 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 			});
 		}
 		if (dex.gen >= 5) {
-			if (this.formatType !== 'natdex' &&
+			if (this.formatType !== 'natdex' && this.formatType !== 'pinkacordnatdex' &&
 				(format === 'monotype' || format.startsWith('monothreat')) && table.metagameBans?.monotype) {
 				tierSet = tierSet.filter(([type, id]) => {
 					if (id in table.metagameBans.monotype) return false;
@@ -1249,7 +1258,8 @@ class BattlePokemonSearch extends BattleTypedSearch<'pokemon'> {
 		}
 
 		// Filter out Gmax Pokemon from standard tier selection
-		if (!(/^(battlestadium|vgc|doublesubers)/g.test(format) || (format === 'doubles' && this.formatType === 'natdex'))) {
+		if (!(/^(battlestadium|vgc|doublesubers)/g.test(format) ||
+			(format === 'doubles' && (this.formatType === 'natdex' || this.formatType === 'pinkacordnatdex')))) {
 			tierSet = tierSet.filter(([type, id]) => {
 				if (type === 'header' && id === 'DUber by technicality') return false;
 				if (type === 'header' && id === 'Uber by technicality') return false;
@@ -1429,6 +1439,8 @@ class BattleItemSearch extends BattleTypedSearch<'item'> {
 			table = table[`champions`];
 		} else if (this.formatType === 'pinkacord') {
 			table = table['pinkacord'];
+		} else if (this.formatType === 'pinkacordnatdex') {
+			table = table['pinkacordnatdex'];
 		} else if (this.dex.gen < 9) {
 			table = table[`gen${this.dex.gen}`];
 		}
@@ -1803,7 +1815,8 @@ class BattleMoveSearch extends BattleTypedSearch<'move'> {
 		const isTradebacks = format.includes('tradebacks');
 		const regionBornLegality = dex.gen >= 6 &&
 			(/^battle(spot|stadium|festival)/.test(format) || format.startsWith('bss') ||
-				format.startsWith('vgc') || (dex.gen === 9 && this.formatType !== 'natdex' && this.formatType !== 'legendsza'));
+				format.startsWith('vgc') || (dex.gen === 9 &&
+					this.formatType !== 'natdex' && this.formatType !== 'pinkacordnatdex' && this.formatType !== 'legendsza'));
 
 		let learnsetid = this.firstLearnsetid(species.id);
 		let moves: string[] = [];
@@ -1819,6 +1832,7 @@ class BattleMoveSearch extends BattleTypedSearch<'move'> {
 		if (this.formatType === 'legendsza') lsetTable = lsetTable['gen9legendsou'];
 		if (this.formatType === 'champions') lsetTable = lsetTable['champions'];
 		if (this.formatType === 'pinkacord') lsetTable = lsetTable['pinkacord'];
+		if (this.formatType === 'pinkacordnatdex') lsetTable = lsetTable['pinkacordnatdex'];
 		if (this.formatType?.startsWith('ssdlc1')) lsetTable = lsetTable['gen8dlc1'];
 		if (this.formatType?.startsWith('predlc')) lsetTable = lsetTable['gen9predlc'];
 		if (this.formatType?.startsWith('svdlc1')) lsetTable = lsetTable['gen9dlc1'];
@@ -1844,7 +1858,10 @@ class BattleMoveSearch extends BattleTypedSearch<'move'> {
 					) {
 						continue;
 					}
-					if (this.formatType !== 'natdex' && this.formatType !== 'legendsza' && move.isNonstandard === "Past") {
+					if (
+						this.formatType !== 'natdex' && this.formatType !== 'pinkacordnatdex' &&
+						this.formatType !== 'legendsza' && move.isNonstandard === "Past"
+					) {
 						continue;
 					}
 					if (
@@ -1886,13 +1903,19 @@ class BattleMoveSearch extends BattleTypedSearch<'move'> {
 				if (sketch) {
 					if (move.flags['nosketch'] || move.isMax || move.isZ) continue;
 					if (move.isNonstandard && move.isNonstandard !== 'Past') continue;
-					if (move.isNonstandard === 'Past' && this.formatType !== 'natdex') continue;
+					if (
+						move.isNonstandard === 'Past' &&
+						this.formatType !== 'natdex' && this.formatType !== 'pinkacordnatdex'
+					) continue;
 					sketchMoves.push(move.id);
 				} else {
-					if (!(dex.gen < 8 || this.formatType === 'natdex') && move.isZ) continue;
+					if (!(dex.gen < 8 || this.formatType === 'natdex' || this.formatType === 'pinkacordnatdex') && move.isZ) continue;
 					if (typeof move.isMax === 'string') continue;
 					if (move.isMax && dex.gen > 8) continue;
-					if (move.isNonstandard === 'Past' && this.formatType !== 'natdex') continue;
+					if (
+						move.isNonstandard === 'Past' &&
+						this.formatType !== 'natdex' && this.formatType !== 'pinkacordnatdex'
+					) continue;
 					if (move.isNonstandard === 'LGPE' && this.formatType !== 'letsgo') continue;
 					moves.push(move.id);
 				}
