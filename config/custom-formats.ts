@@ -7,7 +7,7 @@ export const Formats: import('../sim/dex-formats').FormatList = [
 	{
 		name: "[Pinkacord] Lowering powercreep",
 		desc: "Banning mons",
-		mod: "pinkacord",
+		mod: "gen9",
 		gameType: "singles",
 		ruleset: ["Standard", "Evasion Clause"],
 		banlist: ["Uber", "AG", "Moody", "Shadow Tag", "Arena Trap", "King's Rock", "Razor Fang", "Baton Pass", "Last Respects", "Shed Tail", "Tera Blast", "Ogerpon-Wellspring", "Kyurem", "Ceruledge"],
