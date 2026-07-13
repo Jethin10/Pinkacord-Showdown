@@ -57,9 +57,9 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 		types: ["Psychic", "Steel"],
 		baseStats: {
 			hp: 75,
-			atk: 110,
+			atk: 100,
 			def: 110,
-			spa: 130,
+			spa: 140,
 			spd: 120,
 			spe: 50,
 		},
