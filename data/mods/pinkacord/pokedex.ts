@@ -51,4 +51,24 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 		color: "Pink",
 		eggGroups: ["Field"],
 	},
+	beheeyemmega: {
+		num: 10003,
+		name: "Beheeyem-Mega",
+		types: ["Psychic", "Steel"],
+		baseStats: {
+			hp: 75,
+			atk: 110,
+			def: 110,
+			spa: 130,
+			spd: 120,
+			spe: 50,
+		},
+		abilities: {
+			"0": "Supercompute",
+		},
+		heightm: 1,
+		weightkg: 10,
+		color: "Pink",
+		eggGroups: ["Field"],
+	},
 };

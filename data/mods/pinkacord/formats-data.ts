@@ -12,4 +12,8 @@ export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormat
 		tier: "OU",
 		doublesTier: "DOU",
 	},
+	beheeyemmega: {
+		tier: "OU",
+		doublesTier: "DOU",
+	},
 };
