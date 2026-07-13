@@ -31,4 +31,24 @@ export const Pokedex: import('../../../sim/dex-species').ModdedSpeciesDataTable 
 		eggGroups: ["Field"],
 		requiredItem: "Customite",
 	},
+	reuniclusmega: {
+		num: 10002,
+		name: "Reuniclus-Mega",
+		types: ["Psychic"],
+		baseStats: {
+			hp: 110,
+			atk: 75,
+			def: 100,
+			spa: 165,
+			spd: 110,
+			spe: 30,
+		},
+		abilities: {
+			"0": "Neuroforce",
+		},
+		heightm: 1,
+		weightkg: 10,
+		color: "Pink",
+		eggGroups: ["Field"],
+	},
 };

@@ -8,4 +8,8 @@ export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormat
 		doublesTier: "DOU",
 		natDexTier: "OU",
 	},
+	reuniclusmega: {
+		tier: "OU",
+		doublesTier: "DOU",
+	},
 };
