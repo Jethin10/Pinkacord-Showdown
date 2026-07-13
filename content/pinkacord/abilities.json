@@ -15,6 +15,21 @@
 				}
 			],
 			"breakable": false
+		},
+		{
+			"id": "supercompute",
+			"name": "Supercompute",
+			"shortDesc": "Raise Special Attack by 1 on entry",
+			"effects": [
+				{
+					"kind": "boostStatOnEntry",
+					"params": {
+						"stat": "spa",
+						"amount": 1
+					}
+				}
+			],
+			"breakable": false
 		}
 	]
 }

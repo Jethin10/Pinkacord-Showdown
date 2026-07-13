@@ -17,4 +17,13 @@ export const Abilities: import('../../../sim/dex-abilities').ModdedAbilityDataTa
 		flags: {},
 		gen: 9,
 	},
+	supercompute: {
+		name: "Supercompute",
+		shortDesc: "Raise Special Attack by 1 on entry",
+	onStart(pokemon) {
+			this.boost({ spa: 1 }, pokemon);
+		},
+		flags: {},
+		gen: 9,
+	},
 };
