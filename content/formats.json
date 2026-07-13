@@ -259,7 +259,6 @@
 				"Power Weight",
 				"Quick Claw",
 				"Silver Powder",
-				"Snowball",
 				"Soul Dew",
 				"Star Sweet",
 				"Sweet Apple",
@@ -331,13 +330,15 @@
 				"Up-Grade",
 				"Vile Vial",
 				"Tart Apple",
-				"Gholdengo"
+				"Gholdengo",
+				"Snowball"
 			],
 			"unbanlist": [
 				"Roaring Moon",
 				"Terapagos",
 				"Regieleki",
-				"Volcarona"
+				"Volcarona",
+				"Tera Blast"
 			],
 			"sharedPower": false,
 			"enabled": true
