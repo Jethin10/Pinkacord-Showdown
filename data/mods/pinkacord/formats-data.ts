@@ -16,4 +16,12 @@ export const FormatsData: import('../../../sim/dex-species').ModdedSpeciesFormat
 		tier: "OU",
 		doublesTier: "DOU",
 	},
+	salazzlemega: {
+		tier: "OU",
+		doublesTier: "DOU",
+	},
+	leavannymega: {
+		tier: "OU",
+		doublesTier: "DOU",
+	},
 };
