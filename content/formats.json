@@ -60,12 +60,6 @@
 			"gameType": "singles",
 			"ruleset": [
 				"Standard",
-				"Sleep Clause Mod",
-				"Species Clause",
-				"OHKO Clause",
-				"Evasion Clause",
-				"Endless Battle Clause",
-				"HP Percentage Mod",
 				"Force Tera Type = Stellar"
 			],
 			"banlist": [
@@ -103,7 +97,6 @@
 				"Black Glasses",
 				"Booster Energy",
 				"Bottle Cap",
-				"Bright Powder",
 				"Charcoal",
 				"Chilan Berry",
 				"Cheri Berry",
@@ -284,7 +277,7 @@
 				"Masterpiece Teacup",
 				"Mental Herb",
 				"Metal Coat",
-				"Metronome",
+				"item:Metronome",
 				"Smooth Rock",
 				"Miracle Seed",
 				"Mirror Herb",

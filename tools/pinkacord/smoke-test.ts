@@ -175,6 +175,7 @@ function isTeambuildFailureNotFormatBug(stderr: string): boolean {
 		s.includes("isn't allowed") && s.includes("clause") ||
 		s.includes("z-move clause") ||
 		s.includes("species clause") && s.includes("duplicate") ||
+		s.includes("must have its tera type set to") ||
 		s.includes("species you used") && s.includes("aren't allowed") ||
 		s.includes("tournament-banned")
 	);

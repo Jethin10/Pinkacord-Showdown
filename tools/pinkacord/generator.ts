@@ -306,10 +306,17 @@ export function crossReferenceValidate(c: LoadedContent): void {
 		]);
 		for (const entry of [...(f.banlist || []), ...(f.unbanlist || [])]) {
 			const bare = String(entry).replace(/^[+\-*]/, "").trim();
-			const eid = bare.toLowerCase().replace(/[^a-z0-9]/g, "");
+			const typedEntry = bare.match(/^(pokemon|item|move|ability):\s*(.+)$/i);
+			const eid = (typedEntry?.[2] || bare).toLowerCase().replace(/[^a-z0-9]/g, "");
 			if (!eid || eid.length < 3) continue;
 			if (knownTiers.has(eid)) continue;
-			if (knownEntries.has(eid)) continue;
+			const typedEntries = typedEntry ? {
+				pokemon: new Set([...psBaseSpecies, ...customSpeciesIds]),
+				item: new Set([...psItems, ...customItemIds]),
+				move: new Set([...psMoves, ...customMoveIds]),
+				ability: new Set([...psAbilities, ...customAbilityIds]),
+			}[typedEntry[1].toLowerCase()] : knownEntries;
+			if (typedEntries?.has(eid)) continue;
 			issues.push(`format "${f.name}" references "${entry}" which does not match any known species, tier, or custom content. Did you misspell it?`);
 		}
 	}
