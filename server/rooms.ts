@@ -2126,6 +2126,11 @@ export class GameRoom extends BasicRoom {
 		}
 
 		const fullid = result?.replayid;
+		if (!fullid) {
+			const message = result?.error || 'The replay service did not return a replay ID.';
+			connection?.popup(`Your replay could not be saved: ${message}`);
+			return;
+		}
 		const url = `https://${Config.routes.replays}/${fullid}`;
 		connection?.popup(
 			`|html|<p>Your replay has been uploaded! It's available at:</p><p> ` +

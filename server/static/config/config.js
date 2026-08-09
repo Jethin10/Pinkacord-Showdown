@@ -26,6 +26,8 @@ Config.routes = {
 	// play.pokemonshowdown.com entirely, and the server proxies any asset we
 	// don't ship locally (see proxyAsset in server/sockets.ts).
 	client: location.host,
+	// Replays are stored and rendered by the configured replay service.
+	replays: 'replay.pokemonshowdown.com',
 };
 
 Config.customcolors = {};
