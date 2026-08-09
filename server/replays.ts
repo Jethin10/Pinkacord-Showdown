@@ -144,7 +144,7 @@ export const Replays = new class {
 	generatePassword(length = 31) {
 		let password = '';
 		for (let i = 0; i < length; i++) {
-			password += this.passwordCharacters[crypto.randomInt(0, this.passwordCharacters.length - 1)];
+			password += this.passwordCharacters[crypto.randomInt(0, this.passwordCharacters.length)];
 		}
 
 		return password;
@@ -193,21 +193,23 @@ export const Replays = new class {
 						${order} LIMIT ${limit1}, 51;`.then(this.toReplays);
 				} else {
 					return replays.query()`SELECT uploadtime, id, format, players, rating, password FROM replayplayers 
-						WHERE playerid = ${userid} private = ${isPrivate} 
+						WHERE playerid = ${userid} AND private = ${isPrivate}
 						${order} LIMIT ${limit1}, 51;`.then(this.toReplays);
 				}
 			}
 		}
 
+		const formatFilter = format ? SQL` AND formatid = ${format}` : SQL``;
+
 		if (args.byRating) {
 			return replays.query()`SELECT uploadtime, id, format, players, rating, password 
 				FROM replays 
-				WHERE private = ${isPrivate} AND formatid = ${format} ORDER BY rating DESC LIMIT ${limit1}, 51`
+				WHERE private = ${isPrivate}${formatFilter} ORDER BY rating DESC LIMIT ${limit1}, 51`
 				.then(this.toReplays);
 		} else {
 			return replays.query()`SELECT uploadtime, id, format, players, rating, password 
 				FROM replays 
-				WHERE private = ${isPrivate} AND formatid = ${format} ORDER BY uploadtime DESC LIMIT ${limit1}, 51`
+				WHERE private = ${isPrivate}${formatFilter} ORDER BY uploadtime DESC LIMIT ${limit1}, 51`
 				.then(this.toReplays);
 		}
 	}
